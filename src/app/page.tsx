@@ -1,4 +1,3 @@
-
 import Image from 'next/image';
 import Link from 'next/link';
 import { Trophy, Users, Zap, Bell, ChevronRight } from 'lucide-react';
@@ -64,24 +63,26 @@ export default function Home() {
       </header>
 
       {/* Hero */}
-      <section className="relative h-64 mx-4 mt-4 rounded-2xl overflow-hidden shadow-2xl group">
-        <Image
-          src={heroImg?.imageUrl || ''}
-          alt="Hero Gaming"
-          fill
-          className="object-cover transition-transform duration-700 group-hover:scale-105"
-          data-ai-hint="gaming setup"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-        <div className="absolute bottom-0 left-0 p-6 w-full">
-          <Badge className="mb-2 bg-primary/20 text-primary border-primary/50 backdrop-blur-md">LIVE EVENT</Badge>
-          <h2 className="text-2xl font-headline font-bold leading-tight">Elite Series Season 5</h2>
-          <p className="text-sm text-muted-foreground mb-4">Jump in and dominate the arena.</p>
-          <Button className="w-full bg-primary hover:bg-primary/90 text-white font-bold group">
-            REGISTER NOW <ChevronRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-          </Button>
-        </div>
-      </section>
+      {heroImg?.imageUrl && (
+        <section className="relative h-64 mx-4 mt-4 rounded-2xl overflow-hidden shadow-2xl group">
+          <Image
+            src={heroImg.imageUrl}
+            alt="Hero Gaming"
+            fill
+            className="object-cover transition-transform duration-700 group-hover:scale-105"
+            data-ai-hint="gaming setup"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+          <div className="absolute bottom-0 left-0 p-6 w-full">
+            <Badge className="mb-2 bg-primary/20 text-primary border-primary/50 backdrop-blur-md">LIVE EVENT</Badge>
+            <h2 className="text-2xl font-headline font-bold leading-tight">Elite Series Season 5</h2>
+            <p className="text-sm text-muted-foreground mb-4">Jump in and dominate the arena.</p>
+            <Button className="w-full bg-primary hover:bg-primary/90 text-white font-bold group">
+              REGISTER NOW <ChevronRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
+            </Button>
+          </div>
+        </section>
+      )}
 
       {/* Stats Quick View */}
       <section className="grid grid-cols-2 gap-4 p-4 mt-2">
@@ -123,7 +124,7 @@ export default function Home() {
             <Link key={t.id} href={`/tournaments/${t.id}`}>
               <Card className="bg-card/40 border-white/10 overflow-hidden tournament-card-hover group mb-4">
                 <div className="relative h-40">
-                  <Image src={t.imageUrl} alt={t.title} fill className="object-cover" />
+                  {t.imageUrl && <Image src={t.imageUrl} alt={t.title} fill className="object-cover" />}
                   <div className="absolute top-3 right-3">
                     <Badge variant="secondary" className="bg-background/80 backdrop-blur-md">{t.type}</Badge>
                   </div>

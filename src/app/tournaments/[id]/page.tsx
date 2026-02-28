@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, use } from 'react';
@@ -66,7 +65,9 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     <div className="flex flex-col min-h-screen animate-fade-in pb-24">
       {/* Dynamic Hero Header */}
       <div className="relative h-72 w-full">
-        <Image src={tournament.imageUrl} alt={tournament.title} fill className="object-cover" />
+        {tournament.imageUrl && (
+          <Image src={tournament.imageUrl} alt={tournament.title} fill className="object-cover" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         
         <div className="absolute top-4 left-4 right-4 flex justify-between z-10">

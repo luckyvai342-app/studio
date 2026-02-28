@@ -1,9 +1,9 @@
-
-import { Settings, LogOut, ShieldCheck, Gamepad2, Medal, User as UserIcon, ChevronRight } from 'lucide-react';
+import { Settings, LogOut, ShieldCheck, Gamepad2, Medal, User as UserIcon, ChevronRight, Trophy } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { cn } from '@/lib/utils';
 
 export default function ProfilePage() {
   const avatarImg = PlaceHolderImages.find(img => img.id === 'avatar-user');
@@ -19,7 +19,9 @@ export default function ProfilePage() {
       <div className="flex flex-col items-center mb-8 text-center">
         <div className="relative w-24 h-24 mb-4">
           <div className="absolute inset-0 bg-primary/20 rounded-full animate-pulse" />
-          <Image src={avatarImg?.imageUrl || ''} alt="Avatar" fill className="rounded-full border-4 border-card object-cover" />
+          {avatarImg?.imageUrl && (
+            <Image src={avatarImg.imageUrl} alt="Avatar" fill className="rounded-full border-4 border-card object-cover" />
+          )}
           <div className="absolute bottom-1 right-1 bg-emerald-500 w-5 h-5 rounded-full border-4 border-background" />
         </div>
         <h2 className="text-xl font-headline font-bold mb-1">GhostRider_FF</h2>
@@ -79,7 +81,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-// Fixed import for Trophy
-import { Trophy } from 'lucide-react';
-import { cn } from '@/lib/utils';
