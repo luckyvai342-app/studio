@@ -1,0 +1,35 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "hero-gaming",
+      "description": "Professional gaming setup with purple lighting",
+      "imageUrl": "https://picsum.photos/seed/freefire1/1200/600",
+      "imageHint": "gaming setup"
+    },
+    {
+      "id": "tournament-1",
+      "description": "Battle Royale combat scene",
+      "imageUrl": "https://picsum.photos/seed/ffmatch1/400/250",
+      "imageHint": "action game"
+    },
+    {
+      "id": "tournament-2",
+      "description": "Esports trophy on stage",
+      "imageUrl": "https://picsum.photos/seed/fftrophy/400/250",
+      "imageHint": "esports trophy"
+    },
+    {
+      "id": "tournament-3",
+      "description": "Cyberpunk city landscape",
+      "imageUrl": "https://picsum.photos/seed/ffcity/400/250",
+      "imageHint": "cyberpunk city"
+    },
+    {
+      "id": "avatar-user",
+      "description": "Gamer avatar",
+      "imageUrl": "https://picsum.photos/seed/gamer/100/100",
+      "imageHint": "avatar gamer"
+    }
+  ]
+}
