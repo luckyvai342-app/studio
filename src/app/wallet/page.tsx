@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -9,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { getUserBalance, depositFundsAction, withdrawFundsAction } from '@/app/actions';
 import { Transaction } from '@/app/lib/types';
+import { cn } from '@/lib/utils';
 
 const MOCK_TRANSACTIONS: Transaction[] = [
   { id: 'tx1', userId: 'u1', amount: 50, type: 'entry_fee', status: 'completed', createdAt: '2024-05-15T10:00:00Z', referenceId: 'Apex Grand Finals' },
