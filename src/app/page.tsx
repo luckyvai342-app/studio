@@ -76,7 +76,7 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
           <div className="absolute bottom-0 left-0 p-6 w-full">
             <Badge className="mb-2 bg-primary/20 text-primary border-primary/50 backdrop-blur-md">LIVE EVENT</Badge>
-            <h2 className="text-2xl font-headline font-bold leading-tight">Elite Series Season 5</h2>
+            <h2 className="text-2xl font-headline font-bold leading-tight">Free Fire Sunday Cup</h2>
             <p className="text-sm text-muted-foreground mb-4">Jump in and dominate the arena.</p>
             <Button className="w-full bg-primary hover:bg-primary/90 text-white font-bold group">
               REGISTER NOW <ChevronRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
