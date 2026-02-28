@@ -75,7 +75,7 @@ export default function ProfilePage() {
       </div>
 
       <div className="mt-auto text-center py-8">
-        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mb-1">FreeFire Apex v1.2.0</p>
+        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mb-1">INDIA X E-SPORT V1.1.0</p>
         <p className="text-[10px] text-muted-foreground">Made with ❤️ for the gaming community</p>
       </div>
     </div>
