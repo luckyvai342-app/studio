@@ -40,26 +40,10 @@ const MOCK_TOURNAMENTS: Tournament[] = [
 ];
 
 export default function Home() {
-  const promoImg = PlaceHolderImages.find(img => img.id === 'hero-promo');
   const heroImg = PlaceHolderImages.find(img => img.id === 'hero-gaming');
 
   return (
     <div className="flex flex-col min-h-screen animate-fade-in">
-      {/* Top Promotional Banner */}
-      {promoImg?.imageUrl && (
-        <div className="relative w-full aspect-[16/9] overflow-hidden">
-          <Image
-            src={promoImg.imageUrl}
-            alt="Free Fire Banner"
-            fill
-            className="object-cover"
-            priority
-            data-ai-hint="free fire"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
-        </div>
-      )}
-
       {/* Header */}
       <header className="p-4 flex justify-between items-center bg-background/50 sticky top-0 z-40 backdrop-blur-md border-b border-white/5">
         <div className="flex items-center gap-2">
@@ -139,8 +123,8 @@ export default function Home() {
         <div className="space-y-4">
           {MOCK_TOURNAMENTS.map((t) => (
             <Link key={t.id} href={`/tournaments/${t.id}`}>
-              <Card className="bg-card/40 border-white/10 overflow-hidden tournament-card-hover group mb-4">
-                <div className="relative h-40">
+              <Card className="bg-card/40 border-white/10 tournament-card-hover group mb-4">
+                <div className="relative h-40 overflow-hidden rounded-t-lg">
                   {t.imageUrl && <Image src={t.imageUrl} alt={t.title} fill className="object-cover" />}
                   <div className="absolute top-3 right-3">
                     <Badge variant="secondary" className="bg-background/80 backdrop-blur-md">{t.type}</Badge>
