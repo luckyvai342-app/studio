@@ -49,7 +49,7 @@ export default function Home() {
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center rotate-12">
             <Zap className="text-white w-5 h-5 -rotate-12" />
           </div>
-          <h1 className="text-xl font-headline font-bold gradient-text">APEX</h1>
+          <h1 className="text-xl font-headline font-bold gradient-text uppercase tracking-tighter">INDIA X E-SPORT</h1>
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="icon" className="relative">

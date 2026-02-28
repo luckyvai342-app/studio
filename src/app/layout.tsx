@@ -1,11 +1,10 @@
-
 import type {Metadata} from 'next';
 import './globals.css';
 import { Navbar } from '@/components/layout/Navbar';
 import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
-  title: 'FreeFire Apex | Ultimate Esports Arena',
+  title: 'INDIA X E-SPORT | Ultimate Free Fire Arena',
   description: 'Join elite Free Fire tournaments, win cash prizes, and showcase your skills.',
 };
 
