@@ -2,6 +2,12 @@
 {
   "placeholderImages": [
     {
+      "id": "hero-promo",
+      "description": "Free Fire characters promotional banner",
+      "imageUrl": "https://picsum.photos/seed/freefire-promo/1200/675",
+      "imageHint": "free fire"
+    },
+    {
       "id": "hero-gaming",
       "description": "Professional gaming setup with purple lighting",
       "imageUrl": "https://picsum.photos/seed/freefire1/1200/600",
