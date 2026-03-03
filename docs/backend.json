@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "UserProfile": {
@@ -8,7 +9,8 @@
         "username": { "type": "string" },
         "freeFireId": { "type": "string" },
         "phone": { "type": "string" },
-        "walletBalance": { "type": "number", "description": "Aggregated balance to save read costs" },
+        "walletBalance": { "type": "number" },
+        "lastActionAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["username", "freeFireId", "phone", "walletBalance"]
@@ -42,6 +44,18 @@
         "referenceId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "System-wide security and activity logs",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -60,17 +74,20 @@
       "schema": {
         "type": "object",
         "properties": {
-          "username": { "type": "string", "description": "Denormalized for cost saving" },
+          "username": { "type": "string" },
           "kills": { "type": "number" },
           "joinedAt": { "type": "string", "format": "date-time" }
         }
       },
-      "description": "Participants list with denormalized names"
+      "description": "Participants list"
     },
     "/users/{userId}/transactions/{transactionId}": {
       "schema": "#/entities/Transaction",
       "description": "User financial history"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "#/entities/AuditLog",
+      "description": "Security audit trails"
     }
-  },
-  "_comment": "Security rules optimized for wallet protection and mass-read prevention."
+  }
 }
