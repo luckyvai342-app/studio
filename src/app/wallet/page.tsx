@@ -34,11 +34,9 @@ export default function WalletPage() {
   const [withdrawAmount, setWithdrawAmount] = useState('100');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Real-time user profile for wallet balance
   const userProfileRef = authUser ? doc(db, 'users', authUser.uid) : null;
   const { data: userProfile, loading: userLoading } = useDoc<any>(userProfileRef);
 
-  // Real-time transaction history
   const transactionsQuery = useMemo(() => {
     if (!authUser) return null;
     return query(
@@ -50,7 +48,6 @@ export default function WalletPage() {
 
   const { data: transactions, loading: txLoading } = useCollection<any>(transactionsQuery);
 
-  // Handle successful redirect back from Stripe
   useEffect(() => {
     if (searchParams.get('session_id') && authUser) {
       toast({
@@ -72,6 +69,7 @@ export default function WalletPage() {
     setIsProcessing(true);
     try {
       await addDoc(collection(db, 'users', authUser.uid, 'transactions'), {
+        userId: authUser.uid,
         amount: amountNum,
         type: 'deposit',
         status: 'pending',
@@ -94,12 +92,6 @@ export default function WalletPage() {
     }
   };
 
-  /**
-   * requestWithdrawal - Client-side Transaction logic
-   * 1. Validates amount
-   * 2. Checks current balance
-   * 3. Creates pending record
-   */
   const handleRequestWithdrawal = async () => {
     if (!authUser || !userProfileRef) return;
     const amountNum = parseInt(withdrawAmount);
@@ -124,10 +116,9 @@ export default function WalletPage() {
           throw new Error("Insufficient wallet balance for this withdrawal");
         }
 
-        // Requirement: Create withdrawRequests (Transaction) document with status "pending"
-        // Requirement: Do NOT deduct wallet yet (Admin will verify and then deduct/complete)
         const txRef = doc(collection(db, 'users', authUser.uid, 'transactions'));
         transaction.set(txRef, {
+          userId: authUser.uid,
           amount: amountNum,
           type: 'withdrawal',
           status: 'pending',
@@ -135,7 +126,6 @@ export default function WalletPage() {
           referenceId: 'user_request'
         });
 
-        // Log the attempt
         const auditRef = doc(collection(db, 'audit_logs'));
         transaction.set(auditRef, {
           userId: authUser.uid,
@@ -189,7 +179,6 @@ export default function WalletPage() {
         <div className="w-10" />
       </header>
 
-      {/* Real-time Wallet Card */}
       <Card className="bg-gradient-to-br from-[#00FF88] to-[#00A3FF] border-none shadow-[0_20px_50px_rgba(0,255,136,0.3)] mb-10 overflow-hidden relative rounded-[2.5rem] h-64">
         <div className="absolute top-[-20%] right-[-10%] opacity-10">
           <CreditCard className="w-64 h-64 text-black" />
@@ -223,7 +212,6 @@ export default function WalletPage() {
         </CardContent>
       </Card>
 
-      {/* Transaction History */}
       <div className="flex-1">
         <div className="flex items-center justify-between mb-6 px-2">
           <h3 className="text-xl font-headline font-bold tracking-tight">Activity Logs</h3>
@@ -285,7 +273,6 @@ export default function WalletPage() {
         </Tabs>
       </div>
 
-      {/* Deposit Modal */}
       <Dialog open={isDepositOpen} onOpenChange={setIsDepositOpen}>
         <DialogContent className="bg-[#1A1A1A] border-white/5 rounded-[2.5rem] max-w-[90%] mx-auto">
           <DialogHeader>
@@ -341,7 +328,6 @@ export default function WalletPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Withdrawal Modal */}
       <Dialog open={isWithdrawOpen} onOpenChange={setIsWithdrawOpen}>
         <DialogContent className="bg-[#1A1A1A] border-white/5 rounded-[2.5rem] max-w-[90%] mx-auto">
           <DialogHeader>

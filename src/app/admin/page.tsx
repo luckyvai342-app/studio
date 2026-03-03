@@ -1,19 +1,123 @@
 
 "use client"
 
-import { useState } from 'react';
-import { LayoutDashboard, CheckCircle, Clock, AlertTriangle, FileText, Send } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { LayoutDashboard, CheckCircle, Clock, AlertTriangle, FileText, Send, Loader2, User, IndianRupee, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { generateMatchRecap } from '@/ai/flows/ai-powered-match-recap-generation';
 import { useToast } from '@/hooks/use-toast';
+import { useFirestore, useCollection } from '@/firebase';
+import { collectionGroup, query, where, doc, runTransaction, serverTimestamp, orderBy } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
+  const db = useFirestore();
   const [isGenerating, setIsGenerating] = useState(false);
   const [recapResult, setRecapResult] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // Fetch all pending withdrawal requests across all users using Collection Group Query
+  const pendingWithdrawalsQuery = useMemo(() => {
+    return query(
+      collectionGroup(db, 'transactions'),
+      where('type', '==', 'withdrawal'),
+      where('status', '==', 'pending'),
+      orderBy('createdAt', 'desc')
+    );
+  }, [db]);
+
+  const { data: withdrawals, loading } = useCollection<any>(pendingWithdrawalsQuery);
+
+  const handleApproveWithdrawal = async (tx: any) => {
+    if (!tx.userId || !tx.id) return;
+    setProcessingId(tx.id);
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const userRef = doc(db, 'users', tx.userId);
+        // Path to the specific transaction doc in sub-collection
+        const txRef = doc(db, 'users', tx.userId, 'transactions', tx.id);
+        
+        const userDoc = await transaction.get(userRef);
+        const transactionDoc = await transaction.get(txRef);
+
+        if (!userDoc.exists()) throw new Error("User not found");
+        if (!transactionDoc.exists()) throw new Error("Transaction request not found");
+        
+        const txData = transactionDoc.data();
+        if (txData.status !== 'pending') throw new Error("Request is already processed");
+        
+        const currentBalance = userDoc.data().walletBalance || 0;
+        if (currentBalance < txData.amount) throw new Error("User has insufficient funds for this payout");
+
+        // 1. Deduct walletBalance
+        transaction.update(userRef, {
+          walletBalance: currentBalance - txData.amount,
+          lastActionAt: serverTimestamp()
+        });
+
+        // 2. Update status to 'completed' (Approved)
+        transaction.update(txRef, {
+          status: 'completed',
+          updatedAt: serverTimestamp()
+        });
+
+        // 3. Log Audit
+        const auditRef = doc(collection(db, 'audit_logs'));
+        transaction.set(auditRef, {
+          userId: tx.userId,
+          action: 'WITHDRAWAL_APPROVED',
+          details: `Approved payout of ₹${txData.amount} for user ${tx.userId}`,
+          severity: 'info',
+          timestamp: serverTimestamp()
+        });
+      });
+
+      toast({ title: "Withdrawal Approved", description: `₹${tx.amount} has been deducted from the user's wallet.` });
+    } catch (error: any) {
+      if (error.code === 'permission-denied') {
+        const permissionError = new FirestorePermissionError({
+          path: `/users/${tx.userId}/transactions/${tx.id}`,
+          operation: 'write',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      } else {
+        toast({ variant: "destructive", title: "Approval Failed", description: error.message || "Something went wrong" });
+      }
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRejectWithdrawal = async (tx: any) => {
+    if (!tx.userId || !tx.id) return;
+    setProcessingId(tx.id);
+
+    try {
+      const txRef = doc(db, 'users', tx.userId, 'transactions', tx.id);
+      await runTransaction(db, async (transaction) => {
+        const docSnap = await transaction.get(txRef);
+        if (!docSnap.exists()) throw new Error("Request not found");
+        if (docSnap.data().status !== 'pending') throw new Error("Already processed");
+
+        transaction.update(txRef, { 
+          status: 'failed',
+          updatedAt: serverTimestamp() 
+        });
+      });
+      toast({ title: "Withdrawal Rejected", description: "The request has been marked as failed." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   const handleGenerateRecap = async () => {
     setIsGenerating(true);
@@ -51,33 +155,61 @@ export default function AdminDashboard() {
       </header>
 
       <div className="space-y-6">
-        {/* Pending Approvals */}
+        {/* Real-time Withdrawal Approvals */}
         <Card className="bg-card/40 border-white/5">
           <CardHeader className="p-4 border-b border-white/5">
             <CardTitle className="text-sm font-headline flex items-center justify-between">
-              Pending Withdrawals <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30">12 NEW</Badge>
+              Pending Withdrawals 
+              {withdrawals && withdrawals.length > 0 && (
+                <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30">
+                  {withdrawals.length} REQUESTS
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="divide-y divide-white/5">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="p-4 flex justify-between items-center">
-                  <div>
-                    <p className="text-sm font-bold">₹500.00</p>
-                    <p className="text-[10px] text-muted-foreground">User: GamerID_{i} • 2h ago</p>
+            {loading ? (
+              <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-primary" /></div>
+            ) : withdrawals?.length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">No pending payout requests found.</div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {withdrawals?.map((tx: any) => (
+                  <div key={tx.id} className="p-4 flex justify-between items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold">₹{tx.amount.toLocaleString()}</p>
+                        <Badge variant="outline" className="text-[8px] h-4 border-white/10 uppercase">UID: {tx.userId?.substring(0, 8)}</Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">{new Date(tx.createdAt).toLocaleString()}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="text-rose-500 hover:bg-rose-500/10 h-8"
+                        disabled={!!processingId}
+                        onClick={() => handleRejectWithdrawal(tx)}
+                      >
+                        Reject
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white h-8"
+                        disabled={!!processingId}
+                        onClick={() => handleApproveWithdrawal(tx)}
+                      >
+                        {processingId === tx.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve'}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="ghost" className="text-rose-500 hover:bg-rose-500/10 h-8">Reject</Button>
-                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white h-8">Approve</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Button variant="ghost" className="w-full text-xs text-muted-foreground h-10 hover:bg-white/5">View All Requests</Button>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* AI Recap Tool Simulation */}
+        {/* AI Recap Tool */}
         <Card className="bg-card/40 border-white/5 overflow-hidden">
           <CardHeader className="bg-primary/10 p-4">
             <CardTitle className="text-sm font-headline flex items-center gap-2">
@@ -94,11 +226,11 @@ export default function AdminDashboard() {
             )}
 
             <Button 
-              className="w-full bg-primary hover:bg-primary/90 text-white font-bold"
+              className="w-full bg-primary hover:bg-primary/90 text-black font-bold"
               disabled={isGenerating}
               onClick={handleGenerateRecap}
             >
-              {isGenerating ? 'AI IS THINKING...' : 'GENERATE APEX RECAP'}
+              {isGenerating ? <Loader2 className="animate-spin w-4 h-4" /> : 'GENERATE APEX RECAP'}
             </Button>
           </CardContent>
         </Card>
@@ -120,6 +252,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
