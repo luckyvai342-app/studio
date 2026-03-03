@@ -1,0 +1,76 @@
+
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User account and wallet information",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "freeFireId": { "type": "string" },
+        "phone": { "type": "string" },
+        "walletBalance": { "type": "number", "description": "Aggregated balance to save read costs" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "freeFireId", "phone", "walletBalance"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "Match details and prize information",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "entryFee": { "type": "number" },
+        "totalPrize": { "type": "number" },
+        "status": { "type": "string", "enum": ["open", "ongoing", "completed"] },
+        "startTime": { "type": "string", "format": "date-time" },
+        "maxPlayers": { "type": "number" },
+        "joinedCount": { "type": "number" },
+        "map": { "type": "string" },
+        "type": { "type": "string", "enum": ["Solo", "Duo", "Squad"] },
+        "imageUrl": { "type": "string" }
+      }
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial records for deposits and fees",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["deposit", "withdrawal", "entry_fee", "prize"] },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
+        "referenceId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "auth": {
+    "providers": ["phone"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "#/entities/UserProfile",
+      "description": "User profile and balance"
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": "#/entities/Tournament",
+      "description": "Main tournament metadata"
+    },
+    "/tournaments/{tournamentId}/participants/{userId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "username": { "type": "string", "description": "Denormalized for cost saving" },
+          "kills": { "type": "number" },
+          "joinedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "description": "Participants list with denormalized names"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "#/entities/Transaction",
+      "description": "User financial history"
+    }
+  }
+}
