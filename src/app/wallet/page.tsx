@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, XCircle, CreditCard, ChevronLeft, Loader2, IndianRupee } from 'lucide-react';
+import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, XCircle, CreditCard, ChevronLeft, Loader2, IndianRupee, Landmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,10 +12,14 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useFirestore, useUser, useDoc, useCollection } from '@/firebase';
-import { doc, collection, query, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, orderBy, limit, addDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { createStripeCheckoutSession } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
+const MIN_WITHDRAWAL_AMOUNT = 100;
 
 export default function WalletPage() {
   const db = useFirestore();
@@ -25,7 +29,9 @@ export default function WalletPage() {
   const searchParams = useSearchParams();
 
   const [isDepositOpen, setIsDepositOpen] = useState(false);
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState('500');
+  const [withdrawAmount, setWithdrawAmount] = useState('100');
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Real-time user profile for wallet balance
@@ -51,7 +57,6 @@ export default function WalletPage() {
         title: "Deposit Initiated",
         description: "Your payment is being processed. Credits will reflect shortly.",
       });
-      // Clear URL params
       router.replace('/wallet');
     }
   }, [searchParams, authUser, router, toast]);
@@ -66,7 +71,6 @@ export default function WalletPage() {
 
     setIsProcessing(true);
     try {
-      // 1. Create a pending transaction record for tracking
       await addDoc(collection(db, 'users', authUser.uid, 'transactions'), {
         amount: amountNum,
         type: 'deposit',
@@ -75,7 +79,6 @@ export default function WalletPage() {
         referenceId: 'stripe_pending'
       });
 
-      // 2. Redirect to Stripe Checkout
       const { url } = await createStripeCheckoutSession(amountNum, authUser.uid);
       if (url) {
         window.location.href = url;
@@ -86,6 +89,82 @@ export default function WalletPage() {
         title: "Payment Error",
         description: error.message || "Failed to start checkout",
       });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  /**
+   * requestWithdrawal - Client-side Transaction logic
+   * 1. Validates amount
+   * 2. Checks current balance
+   * 3. Creates pending record
+   */
+  const handleRequestWithdrawal = async () => {
+    if (!authUser || !userProfileRef) return;
+    const amountNum = parseInt(withdrawAmount);
+
+    if (isNaN(amountNum) || amountNum < MIN_WITHDRAWAL_AMOUNT) {
+      toast({ 
+        variant: "destructive", 
+        title: "Invalid Amount", 
+        description: `Minimum withdrawal is ₹${MIN_WITHDRAWAL_AMOUNT}` 
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userProfileRef);
+        if (!userDoc.exists()) throw new Error("User profile not found");
+        
+        const currentBalance = userDoc.data().walletBalance || 0;
+        if (currentBalance < amountNum) {
+          throw new Error("Insufficient wallet balance for this withdrawal");
+        }
+
+        // Requirement: Create withdrawRequests (Transaction) document with status "pending"
+        // Requirement: Do NOT deduct wallet yet (Admin will verify and then deduct/complete)
+        const txRef = doc(collection(db, 'users', authUser.uid, 'transactions'));
+        transaction.set(txRef, {
+          amount: amountNum,
+          type: 'withdrawal',
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          referenceId: 'user_request'
+        });
+
+        // Log the attempt
+        const auditRef = doc(collection(db, 'audit_logs'));
+        transaction.set(auditRef, {
+          userId: authUser.uid,
+          action: 'WITHDRAWAL_REQUESTED',
+          details: `Requested withdrawal of ₹${amountNum}`,
+          severity: 'info',
+          timestamp: serverTimestamp()
+        });
+      });
+
+      setIsWithdrawOpen(false);
+      toast({ 
+        title: "Request Submitted", 
+        description: "Your withdrawal is pending admin approval." 
+      });
+    } catch (error: any) {
+      if (error.code === 'permission-denied') {
+        const permissionError = new FirestorePermissionError({
+          path: userProfileRef.path,
+          operation: 'write',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Withdrawal Failed",
+          description: error.message || "Something went wrong",
+        });
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -133,7 +212,11 @@ export default function WalletPage() {
             >
               <Plus className="w-5 h-5 mr-2" /> TOP UP
             </Button>
-            <Button variant="outline" className="flex-1 border-black/20 bg-black/10 text-black hover:bg-black/20 font-black h-16 rounded-3xl transition-transform active:scale-95">
+            <Button 
+              onClick={() => setIsWithdrawOpen(true)}
+              variant="outline" 
+              className="flex-1 border-black/20 bg-black/10 text-black hover:bg-black/20 font-black h-16 rounded-3xl transition-transform active:scale-95"
+            >
               PAYOUT
             </Button>
           </div>
@@ -253,6 +336,56 @@ export default function WalletPage() {
               onClick={handleDeposit}
             >
               {isProcessing ? <Loader2 className="animate-spin" /> : 'SECURE CHECKOUT'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Withdrawal Modal */}
+      <Dialog open={isWithdrawOpen} onOpenChange={setIsWithdrawOpen}>
+        <DialogContent className="bg-[#1A1A1A] border-white/5 rounded-[2.5rem] max-w-[90%] mx-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-headline font-bold text-center">Request Payout</DialogTitle>
+            <DialogDescription className="text-center text-muted-foreground">
+              Transfer your winnings to your linked bank account or UPI.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            <div className="bg-background/40 p-6 rounded-3xl border border-white/5 text-center">
+              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-2">Maximum Withdrawable</p>
+              <p className="text-3xl font-headline font-bold text-[#00E0FF]">₹{userProfile?.walletBalance?.toLocaleString() ?? '0'}</p>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest ml-1">Enter Amount (Min ₹100)</p>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">₹</span>
+                <Input 
+                  type="number" 
+                  value={withdrawAmount} 
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="bg-background/50 border-white/10 h-16 pl-10 rounded-2xl text-xl font-bold focus:border-primary"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-amber-500/10 rounded-2xl border border-amber-500/20 flex gap-3">
+              <Landmark className="w-5 h-5 text-amber-500 shrink-0" />
+              <p className="text-[10px] text-amber-500 font-bold uppercase tracking-tight leading-relaxed">
+                Payouts are processed manually within 24-48 hours. Ensure your profile details are correct.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              className="w-full h-16 rounded-[1.5rem] bg-[#00E0FF] text-black font-black text-lg shadow-lg shadow-[#00E0FF]/20"
+              disabled={isProcessing || !withdrawAmount || parseInt(withdrawAmount) < MIN_WITHDRAWAL_AMOUNT || (userProfile?.walletBalance < parseInt(withdrawAmount))}
+              onClick={handleRequestWithdrawal}
+            >
+              {isProcessing ? <Loader2 className="animate-spin" /> : 'SUBMIT PAYOUT REQUEST'}
             </Button>
           </DialogFooter>
         </DialogContent>
