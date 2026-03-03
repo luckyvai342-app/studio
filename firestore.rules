@@ -2,6 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Core Authentication Helpers
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -14,28 +15,34 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
-    // Protection against replay attacks and rapid spamming
+    // Protection against rapid spamming
     function isNotRateLimited(userId) {
-      let lastAction = get(/databases/$(database)/documents/users/$(userId)).data.lastActionAt;
-      return lastAction == null || duration.value(request.time - lastAction) > duration.value(2, 's');
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      return !exists(/databases/$(database)/documents/users/$(userId)) || 
+             userDoc.data.lastActionAt == null || 
+             duration.value(request.time - userDoc.data.lastActionAt) > duration.value(2, 's');
     }
 
+    // User Profile Rules
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
       
-      // Initial profile creation
+      // Profile creation: Users can create their own profile with 0 balance
       allow create: if isOwner(userId) 
                     && request.resource.data.walletBalance == 0;
       
-      // PROTECTING WALLET: Only allow updating username/id/phone. 
-      // walletBalance can only be changed by Admin or a System Transaction (via Admin SDK)
-      allow update: if isOwner(userId) 
-                    && request.resource.data.walletBalance == resource.data.walletBalance
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'freeFireId', 'phone', 'lastActionAt'])
-                    || isAdmin();
+      // SECURE WALLET: Owners can update metadata (username, phone, etc.) 
+      // but MUST NOT change their walletBalance.
+      // Only Admins (or Admin SDK via Backend) can change balance.
+      allow update: if (
+        isOwner(userId) 
+        && request.resource.data.walletBalance == resource.data.walletBalance
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'freeFireId', 'phone', 'lastActionAt'])
+      ) || isAdmin();
     }
 
+    // Tournament Rules
     match /tournaments/{tournamentId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
@@ -43,7 +50,7 @@ service cloud.firestore {
       match /participants/{userId} {
         allow read: if isAuthenticated();
         
-        // Strict join logic validation
+        // Joining: User can join if they are the owner and start with 0 kills
         allow create: if isOwner(userId) 
                       && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId))
                       && request.resource.data.kills == 0
@@ -53,24 +60,34 @@ service cloud.firestore {
       }
     }
 
+    // Transaction & Withdrawal Rules
     match /users/{userId}/transactions/{transactionId} {
       allow read: if isOwner(userId) || isAdmin();
       
-      // Users can only request pending financial actions
+      // Withdrawal/Deposit Request: 
+      // 1. User must be the owner.
+      // 2. Status must be 'pending'.
+      // 3. Type must be 'deposit' or 'withdrawal'.
+      // 4. Amount must be positive.
       allow create: if isOwner(userId) 
                     && request.resource.data.status == 'pending'
+                    && request.resource.data.amount > 0
                     && (request.resource.data.type == 'deposit' || request.resource.data.type == 'withdrawal')
                     && isNotRateLimited(userId);
       
+      // IMMUTABILITY: Users can NEVER update or delete a transaction once created.
+      // This prevents users from "approving" their own withdrawals or hiding history.
+      // Only Admins can update status (e.g., to 'completed' or 'failed').
       allow update, delete: if isAdmin();
     }
 
+    // Audit Log Rules
     match /audit_logs/{logId} {
-      // Audit logs are read-only for admins to prevent record tampering
+      // Admins can view logs for security monitoring
       allow read: if isAdmin();
-      // Users can append logs (system events) but never edit or delete
+      // System can append logs, users can trigger appends via specific actions
       allow create: if isAuthenticated();
-      allow update, delete: if false;
+      allow update, delete: if false; // Logs are immutable for everyone
     }
   }
 }
