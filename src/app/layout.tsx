@@ -1,7 +1,9 @@
+
 import type {Metadata} from 'next';
 import './globals.css';
 import { Navbar } from '@/components/layout/Navbar';
 import { Toaster } from '@/components/ui/toaster';
+import { AuthGuard } from '@/components/auth/AuthGuard';
 
 export const metadata: Metadata = {
   title: 'INDIA X E-SPORT | Ultimate Free Fire Arena',
@@ -22,11 +24,16 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen pb-20 md:pb-0 md:pt-0">
         <main className="max-w-md mx-auto min-h-screen bg-background shadow-2xl relative border-x border-white/5">
-          {children}
-          <Navbar />
+          <AuthGuard>
+            {children}
+            <NavbarWrapper />
+          </AuthGuard>
         </main>
         <Toaster />
       </body>
     </html>
   );
 }
+
+// Separate component to hide navbar on login page
+import { LayoutNavbarWrapper as NavbarWrapper } from '@/components/layout/NavbarWrapper';

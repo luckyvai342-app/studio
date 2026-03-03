@@ -1,3 +1,8 @@
+
+"use client"
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Settings, LogOut, ShieldCheck, Gamepad2, Medal, User as UserIcon, ChevronRight, Trophy } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -6,7 +11,23 @@ import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { cn } from '@/lib/utils';
 
 export default function ProfilePage() {
+  const router = useRouter();
+  const [userData, setUserData] = useState<any>(null);
   const avatarImg = PlaceHolderImages.find(img => img.id === 'avatar-user');
+
+  useEffect(() => {
+    const user = localStorage.getItem('ff_user');
+    if (user) {
+      setUserData(JSON.parse(user));
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('ff_user');
+    router.push('/login');
+  };
+
+  if (!userData) return null;
 
   return (
     <div className="flex flex-col min-h-screen animate-fade-in p-4 pb-24">
@@ -24,10 +45,11 @@ export default function ProfilePage() {
           )}
           <div className="absolute bottom-1 right-1 bg-emerald-500 w-5 h-5 rounded-full border-4 border-background" />
         </div>
-        <h2 className="text-xl font-headline font-bold mb-1">GhostRider_FF</h2>
+        <h2 className="text-xl font-headline font-bold mb-1">{userData.name}</h2>
         <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground bg-card/60 px-3 py-1 rounded-full border border-white/5">
-          <Gamepad2 className="w-3 h-3 text-primary" /> FF ID: 529381023
+          <Gamepad2 className="w-3 h-3 text-primary" /> FF ID: {userData.ffid}
         </div>
+        <p className="text-[10px] mt-2 text-muted-foreground uppercase font-bold tracking-widest">{userData.phone}</p>
       </div>
 
       {/* Stats Grid */}
@@ -53,11 +75,12 @@ export default function ProfilePage() {
           { icon: UserIcon, label: 'Account Information' },
           { icon: ShieldCheck, label: 'Identity Verification' },
           { icon: Medal, label: 'Achievements & Badges' },
-          { icon: LogOut, label: 'Log Out', danger: true },
+          { icon: LogOut, label: 'Log Out', danger: true, onClick: handleLogout },
         ].map((item, i) => (
           <Button 
             key={i} 
             variant="ghost" 
+            onClick={item.onClick}
             className={cn(
               "w-full justify-between h-14 px-4 bg-card/20 hover:bg-card/40 border border-white/5 rounded-2xl",
               item.danger && "text-rose-500 hover:text-rose-400 hover:bg-rose-500/5"
