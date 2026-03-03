@@ -5,26 +5,26 @@
 
 @layer base {
   :root {
-    --background: 285 10% 13%;
+    --background: 0 0% 5%;
     --foreground: 0 0% 98%;
-    --card: 285 10% 15%;
+    --card: 0 0% 10%;
     --card-foreground: 0 0% 98%;
-    --popover: 285 10% 13%;
+    --popover: 0 0% 5%;
     --popover-foreground: 0 0% 98%;
-    --primary: 275 100% 65%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 100% 70%;
-    --secondary-foreground: 285 10% 13%;
-    --muted: 285 5% 25%;
-    --muted-foreground: 285 5% 70%;
-    --accent: 220 100% 70%;
-    --accent-foreground: 285 10% 13%;
+    --primary: 152 100% 50%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 152 100% 50%;
+    --accent-foreground: 0 0% 0%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 285 10% 20%;
-    --input: 285 10% 20%;
-    --ring: 275 100% 65%;
-    --radius: 0.75rem;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 152 100% 50%;
+    --radius: 1rem;
   }
 }
 
@@ -36,7 +36,7 @@
     @apply bg-background text-foreground font-body;
   }
   h1, h2, h3, h4, h5, h6 {
-    @apply font-headline tracking-tight;
+    @apply font-headline tracking-tight font-bold;
   }
 }
 
@@ -45,9 +45,17 @@
 }
 
 .gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-[#B34DFF] to-[#6699FF];
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-[#00FF88] to-[#00E0FF];
 }
 
 .tournament-card-hover {
-  @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(179,77,255,0.3)];
+  @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(0,255,136,0.2)];
+}
+
+.neon-glow {
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+}
+
+.neon-border {
+  border: 1px solid rgba(0, 255, 136, 0.3);
 }
