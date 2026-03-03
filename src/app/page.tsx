@@ -1,4 +1,3 @@
-
 "use client"
 
 import Image from 'next/image';
@@ -8,14 +7,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, limit, orderBy } from 'firebase/firestore';
+import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
+import { collection, query, limit, orderBy, doc } from 'firebase/firestore';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
   const db = useFirestore();
+  const { user: authUser } = useUser();
   const heroImg = PlaceHolderImages.find(img => img.id === 'hero-gaming');
+
+  // Real-time user profile for wallet balance
+  const userProfileRef = authUser ? doc(db, 'users', authUser.uid) : null;
+  const { data: userProfile } = useDoc<any>(userProfileRef);
 
   const tournamentsQuery = useMemo(() => {
     return query(
@@ -29,7 +33,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-col min-h-screen animate-in-fade bg-[#0D0D0D]">
-      {/* Sticky Header */}
+      {/* Sticky Header with Wallet Visibility */}
       <header className="p-4 flex justify-between items-center bg-[#0D0D0D]/80 sticky top-0 z-50 backdrop-blur-xl border-b border-white/5">
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center rotate-3 shadow-[0_0_20px_rgba(0,255,136,0.4)]">
@@ -42,8 +46,10 @@ export default function Home() {
             <Bell className="w-5 h-5 text-muted-foreground" />
             <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-background animate-pulse" />
           </Button>
-          <Link href="/wallet" className="flex items-center gap-2 bg-primary/10 pl-3 pr-1 py-1 rounded-xl border border-primary/20 group">
-            <span className="text-xs font-black text-primary">₹500</span>
+          <Link href="/wallet" className="flex items-center gap-2 bg-primary/10 pl-3 pr-1 py-1 rounded-xl border border-primary/20 group hover:border-primary/50 transition-colors">
+            <span className="text-xs font-black text-primary">
+              ₹{userProfile?.walletBalance !== undefined ? userProfile.walletBalance.toLocaleString() : '---'}
+            </span>
             <div className="bg-primary p-1 rounded-lg">
               <ArrowUpRight className="w-3 h-3 text-black" />
             </div>
@@ -53,7 +59,7 @@ export default function Home() {
 
       {/* Featured Hero */}
       <section className="px-4 mt-6">
-        <div className="relative h-64 w-full rounded-[2.5rem] overflow-hidden shadow-2xl group border border-white/5">
+        <div className="relative h-72 w-full rounded-[2.5rem] overflow-hidden shadow-2xl group border border-white/5">
           {heroImg?.imageUrl && (
             <Image
               src={heroImg.imageUrl}
@@ -65,22 +71,24 @@ export default function Home() {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D] via-transparent to-transparent" />
           <div className="absolute bottom-0 left-0 p-8 w-full">
-            <Badge className="mb-3 bg-primary text-black font-black uppercase tracking-widest px-3 py-1 rounded-lg text-[10px]">Grand Prize Pool</Badge>
-            <h2 className="text-3xl font-headline font-bold leading-tight mb-2 tracking-tighter">Sunday Cup Royale</h2>
+            <Badge className="mb-3 bg-primary text-black font-black uppercase tracking-widest px-3 py-1 rounded-lg text-[10px]">Featured Event</Badge>
+            <h2 className="text-3xl font-headline font-bold leading-tight mb-2 tracking-tighter">Free Fire Sunday Cup</h2>
             <div className="flex items-center gap-4 mb-6">
               <div className="flex items-center gap-1.5">
                 <Trophy className="w-4 h-4 text-primary" />
-                <span className="text-sm font-bold text-primary">₹25,000</span>
+                <span className="text-sm font-bold text-primary">₹25,000 Pool</span>
               </div>
               <div className="h-4 w-[1px] bg-white/10" />
               <div className="flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-bold text-muted-foreground">Squad Mode</span>
+                <span className="text-sm font-bold text-muted-foreground">Squad Battle</span>
               </div>
             </div>
-            <Button className="w-full bg-primary hover:bg-primary/90 text-black font-black h-14 rounded-2xl group shadow-[0_5px_30px_rgba(0,255,136,0.3)]">
-              JOIN THE BATTLE <ChevronRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
-            </Button>
+            <Link href="/tournaments">
+              <Button className="w-full bg-primary hover:bg-primary/90 text-black font-black h-14 rounded-2xl group shadow-[0_5px_30px_rgba(0,255,136,0.3)]">
+                EXPLORE BATTLES <ChevronRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -92,7 +100,7 @@ export default function Home() {
             <div className="p-3 bg-primary/10 rounded-2xl w-fit mb-2">
               <Trophy className="text-primary w-5 h-5" />
             </div>
-            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Prizes Distributed</p>
+            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Prizes Given</p>
             <p className="text-xl font-headline font-bold tracking-tight">₹1.2M+</p>
           </CardContent>
         </Card>
@@ -101,8 +109,8 @@ export default function Home() {
             <div className="p-3 bg-primary/10 rounded-2xl w-fit mb-2">
               <Users className="text-primary w-5 h-5" />
             </div>
-            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Active Warriors</p>
-            <p className="text-xl font-headline font-bold tracking-tight">14,240</p>
+            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Active Pro Users</p>
+            <p className="text-xl font-headline font-bold tracking-tight">14K+</p>
           </CardContent>
         </Card>
       </section>
@@ -110,15 +118,17 @@ export default function Home() {
       {/* Matches Section */}
       <section className="p-4 mb-24">
         <div className="flex justify-between items-center mb-6 px-2">
-          <h3 className="text-xl font-headline font-bold tracking-tight">Active Tournaments</h3>
+          <h3 className="text-xl font-headline font-bold tracking-tight">Upcoming Battles</h3>
           <Link href="/tournaments" className="text-primary text-[10px] font-black flex items-center uppercase tracking-widest bg-primary/5 px-3 py-2 rounded-full border border-primary/10 hover:bg-primary/10 transition-colors">
             View All <ChevronRight className="ml-1 w-3 h-3" />
           </Link>
         </div>
         
         {loading ? (
-          <div className="flex justify-center p-12">
-            <Loader2 className="animate-spin text-primary w-8 h-8" />
+          <div className="space-y-4">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-64 bg-white/5 rounded-[2rem] shimmer" />
+            ))}
           </div>
         ) : (
           <div className="space-y-6">
@@ -139,16 +149,16 @@ export default function Home() {
                     </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A1A] via-transparent to-transparent" />
                     <div className="absolute bottom-0 left-0 w-full p-6">
-                      <h4 className="font-headline font-bold text-2xl tracking-tight leading-none">{t.title}</h4>
+                      <h4 className="font-headline font-bold text-2xl tracking-tight leading-none group-hover:text-primary transition-colors">{t.title}</h4>
                     </div>
                   </div>
                   <CardContent className="p-6">
                     <div className="flex justify-between items-center mb-6">
                       <div className="flex flex-col">
-                        <span className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">Total Prize</span>
+                        <span className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">Winning Pool</span>
                         <div className="flex items-center gap-1.5">
                           <Trophy className="w-4 h-4 text-primary" />
-                          <span className="text-xl font-headline font-bold text-primary">₹{t.totalPrize}</span>
+                          <span className="text-xl font-headline font-bold text-primary">₹{t.totalPrize.toLocaleString()}</span>
                         </div>
                       </div>
                       <div className="flex flex-col items-end">
@@ -161,8 +171,8 @@ export default function Home() {
                     
                     <div className="space-y-3">
                       <div className="flex justify-between text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                        <span>Players: {t.joinedCount}/{t.maxPlayers}</span>
-                        <span className="text-primary">{Math.round((t.joinedCount / t.maxPlayers) * 100)}% Reached</span>
+                        <span>FIGHTERS: {t.joinedCount}/{t.maxPlayers}</span>
+                        <span className="text-primary">{Math.round((t.joinedCount / t.maxPlayers) * 100)}% FULL</span>
                       </div>
                       <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden p-[2px]">
                         <div 

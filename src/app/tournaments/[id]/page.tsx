@@ -3,7 +3,7 @@
 import { useState, use } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, Share2, Info, Loader2 } from 'lucide-react';
+import { Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, Share2, Info, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,7 @@ import { useFirestore, useUser, useDoc } from '@/firebase';
 import { doc, runTransaction, serverTimestamp, collection } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -56,7 +57,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         });
 
         transaction.update(tournamentRef, {
-          joinedCount: tourneyData.joinedCount + 1
+          joinedCount: (tourneyData.joinedCount || 0) + 1
         });
 
         transaction.set(participantRef, {
@@ -95,112 +96,160 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
-  if (tourneyLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
-  if (!tournament) return <div className="p-8 text-center">Tournament not found</div>;
+  if (tourneyLoading) return (
+    <div className="flex h-screen items-center justify-center bg-background">
+      <Loader2 className="animate-spin text-primary w-12 h-12" />
+    </div>
+  );
 
-  const isFull = tournament.joinedCount >= tournament.maxPlayers;
+  if (!tournament) return (
+    <div className="flex flex-col h-screen items-center justify-center p-8 text-center gap-4">
+      <AlertCircle className="w-12 h-12 text-rose-500" />
+      <h2 className="text-xl font-bold">Tournament Not Found</h2>
+      <Button variant="ghost" onClick={() => router.push('/')}>Go Home</Button>
+    </div>
+  );
+
+  const isFull = (tournament.joinedCount || 0) >= (tournament.maxPlayers || 0);
   const canAfford = userProfile && userProfile.walletBalance >= tournament.entryFee;
 
   return (
-    <div className="flex flex-col min-h-screen animate-fade-in pb-24">
+    <div className="flex flex-col min-h-screen animate-fade-in pb-40">
       <div className="relative h-72 w-full">
         {tournament.imageUrl && (
-          <Image src={tournament.imageUrl} alt={tournament.title} fill className="object-cover" />
+          <Image 
+            src={tournament.imageUrl} 
+            alt={tournament.title} 
+            fill 
+            className="object-cover opacity-80" 
+            priority
+          />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D] via-[#0D0D0D]/40 to-transparent" />
         
         <div className="absolute top-4 left-4 right-4 flex justify-between z-10">
-          <Button variant="ghost" size="icon" className="bg-background/20 backdrop-blur-md rounded-full text-white" onClick={() => router.back()}>
+          <Button variant="ghost" size="icon" className="bg-black/40 backdrop-blur-md rounded-2xl text-white hover:bg-black/60" onClick={() => router.back()}>
             <ChevronLeft className="w-6 h-6" />
           </Button>
-          <Button variant="ghost" size="icon" className="bg-background/20 backdrop-blur-md rounded-full text-white">
+          <Button variant="ghost" size="icon" className="bg-black/40 backdrop-blur-md rounded-2xl text-white hover:bg-black/60">
             <Share2 className="w-5 h-5" />
           </Button>
         </div>
 
         <div className="absolute bottom-6 left-6 right-6">
           <div className="flex gap-2 mb-2">
-            <Badge className="bg-primary text-white border-none">{tournament.status?.toUpperCase()}</Badge>
-            <Badge variant="outline" className="text-white border-white/20 backdrop-blur-md">{tournament.type}</Badge>
+            <Badge className="bg-primary text-black border-none font-black uppercase tracking-widest px-2 py-1 rounded-lg text-[9px]">
+              {tournament.status?.toUpperCase() || 'OPEN'}
+            </Badge>
+            <Badge variant="outline" className="text-white border-white/20 backdrop-blur-md px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
+              {tournament.type}
+            </Badge>
           </div>
-          <h1 className="text-3xl font-headline font-bold text-white leading-tight">{tournament.title}</h1>
+          <h1 className="text-3xl font-headline font-bold text-white leading-tight tracking-tighter uppercase">{tournament.title}</h1>
         </div>
       </div>
 
-      <div className="px-6 space-y-8 -mt-2">
+      <div className="px-6 space-y-8 mt-6">
         <div className="grid grid-cols-2 gap-4">
-          <Card className="bg-primary/10 border-primary/20">
-            <CardContent className="p-4">
-              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-1">Prize Pool</p>
+          <Card className="bg-primary/5 border-primary/20 rounded-[2rem]">
+            <CardContent className="p-5">
+              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Grand Prize</p>
               <div className="flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-primary" />
-                <span className="text-xl font-headline font-bold text-primary">₹{tournament.totalPrize}</span>
+                <span className="text-2xl font-headline font-bold text-primary">₹{tournament.totalPrize.toLocaleString()}</span>
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-card/40 border-white/5">
-            <CardContent className="p-4">
-              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-1">Entry Fee</p>
+          <Card className="bg-white/5 border-white/10 rounded-[2rem]">
+            <CardContent className="p-5">
+              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Entry Fee</p>
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-accent" />
-                <span className="text-xl font-headline font-bold text-accent">₹{tournament.entryFee}</span>
+                <Shield className="w-5 h-5 text-[#00E0FF]" />
+                <span className="text-2xl font-headline font-bold text-white">₹{tournament.entryFee}</span>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="space-y-3">
-          <div className="flex justify-between items-center text-sm font-bold">
-            <span className="flex items-center gap-2"><Users className="w-4 h-4 text-primary" /> Joined Players</span>
-            <span>{tournament.joinedCount} / {tournament.maxPlayers}</span>
+        <div className="space-y-3 bg-white/5 p-6 rounded-[2rem] border border-white/5">
+          <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            <span className="flex items-center gap-2 text-foreground"><Users className="w-4 h-4 text-primary" /> Squad Status</span>
+            <span>{tournament.joinedCount || 0} / {tournament.maxPlayers} Filled</span>
           </div>
-          <Progress value={(tournament.joinedCount / tournament.maxPlayers) * 100} className="h-2" />
+          <Progress value={((tournament.joinedCount || 0) / (tournament.maxPlayers || 1)) * 100} className="h-2 bg-white/10" />
+          {isFull && (
+            <p className="text-[10px] text-rose-500 font-bold uppercase text-center mt-2 tracking-widest">THIS ARENA IS CURRENTLY FULL</p>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-y-6">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-card rounded-lg border border-white/5">
-              <Clock className="w-5 h-5 text-muted-foreground" />
+        <div className="grid grid-cols-2 gap-y-8 bg-white/5 p-6 rounded-[2rem] border border-white/5">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-background rounded-2xl border border-white/10 text-primary">
+              <Clock className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-bold uppercase">Starts At</p>
+              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Combat Start</p>
               <p className="text-sm font-bold">{new Date(tournament.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           </div>
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-card rounded-lg border border-white/5">
-              <MapIcon className="w-5 h-5 text-muted-foreground" />
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-background rounded-2xl border border-white/10 text-[#00E0FF]">
+              <MapIcon className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-bold uppercase">Map</p>
+              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Map Selection</p>
               <p className="text-sm font-bold">{tournament.map}</p>
             </div>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <h3 className="text-lg font-headline font-bold flex items-center gap-2">
-            <Info className="w-5 h-5 text-primary" /> Tournament Rules
+        <div className="space-y-4">
+          <h3 className="text-xl font-headline font-bold flex items-center gap-2 tracking-tighter uppercase">
+            <Info className="w-5 h-5 text-primary" /> Battle Directives
           </h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            {tournament.description || "No specific rules provided for this tournament."}
+          <p className="text-sm text-muted-foreground leading-relaxed font-medium">
+            {tournament.description || "No specific rules provided for this tournament. All standard Free Fire tournament rules apply."}
           </p>
         </div>
       </div>
 
-      <div className="fixed bottom-20 left-0 right-0 p-4 max-w-md mx-auto">
-        <div className="glass-morphism rounded-2xl p-4 border border-white/10 flex items-center justify-between gap-4 shadow-2xl">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase">Your Wallet</span>
-            <span className="text-lg font-headline font-bold text-accent">₹{userProfile?.walletBalance ?? '0'}</span>
+      {/* Fixed Join Bar with Logic */}
+      <div className="fixed bottom-0 left-0 right-0 p-6 z-50 pointer-events-none">
+        <div className="max-w-md mx-auto pointer-events-auto">
+          <div className="glass-morphism rounded-[2.5rem] p-6 border border-white/10 flex flex-col gap-4 shadow-[0_20px_60px_rgba(0,0,0,0.8)]">
+            {!canAfford && userProfile && (
+              <Alert className="bg-rose-500/10 border-rose-500/20 py-2">
+                <AlertDescription className="text-[10px] font-black text-rose-500 uppercase tracking-widest text-center">
+                  Insufficient Credits. Please top up ₹{tournament.entryFee - userProfile.walletBalance} to join.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="flex items-center justify-between gap-6">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Your Balance</span>
+                <span className="text-xl font-headline font-bold text-[#00E0FF]">₹{userProfile?.walletBalance?.toLocaleString() ?? '0'}</span>
+              </div>
+              <Button 
+                className={cn(
+                  "flex-1 font-black h-16 rounded-3xl shadow-lg transition-all active:scale-95 text-base uppercase tracking-tighter",
+                  canAfford && !isFull ? "bg-primary text-black shadow-primary/20 hover:bg-primary/90" : "bg-white/5 text-muted-foreground"
+                )}
+                disabled={isJoining || isFull || !canAfford}
+                onClick={handleJoin}
+              >
+                {isJoining ? (
+                  <Loader2 className="animate-spin" />
+                ) : isFull ? (
+                  'ARENA FULL'
+                ) : !canAfford ? (
+                  'LOCKED: ₹' + tournament.entryFee
+                ) : (
+                  `JOIN BATTLE: ₹${tournament.entryFee}`
+                )}
+              </Button>
+            </div>
           </div>
-          <Button 
-            className="flex-1 bg-primary hover:bg-primary/90 text-white font-bold h-12 shadow-lg shadow-primary/20"
-            disabled={isJoining || isFull || !canAfford}
-            onClick={handleJoin}
-          >
-            {isJoining ? <Loader2 className="animate-spin" /> : isFull ? 'TOURNAMENT FULL' : `PAY ₹${tournament.entryFee} TO JOIN`}
-          </Button>
         </div>
       </div>
     </div>
