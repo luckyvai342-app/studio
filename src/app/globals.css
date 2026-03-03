@@ -33,7 +33,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-body;
+    @apply bg-background text-foreground font-body overflow-x-hidden;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-headline tracking-tight font-bold;
@@ -41,21 +41,41 @@
 }
 
 .glass-morphism {
-  @apply bg-white/5 backdrop-blur-lg border border-white/10;
+  @apply bg-white/5 backdrop-blur-xl border border-white/10;
 }
 
 .gradient-text {
   @apply bg-clip-text text-transparent bg-gradient-to-r from-[#00FF88] to-[#00E0FF];
 }
 
-.tournament-card-hover {
-  @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(0,255,136,0.2)];
-}
-
 .neon-glow {
-  box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
 }
 
 .neon-border {
-  border: 1px solid rgba(0, 255, 136, 0.3);
+  @apply border border-primary/30 hover:border-primary/60 transition-colors duration-300;
+}
+
+.tournament-card-hover {
+  @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,255,136,0.15)];
+}
+
+.animate-in-fade {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-primary/20 rounded-full hover:bg-primary/40;
 }
