@@ -1,10 +1,9 @@
-
 import type {Metadata} from 'next';
 import './globals.css';
-import { Navbar } from '@/components/layout/Navbar';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 
 export const metadata: Metadata = {
   title: 'INDIA X E-SPORT | Ultimate Free Fire Arena',
@@ -25,6 +24,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen pb-20 md:pb-0 md:pt-0">
         <FirebaseClientProvider>
+          <FirebaseErrorListener />
           <main className="max-w-md mx-auto min-h-screen bg-background shadow-2xl relative border-x border-white/5">
             <AuthGuard>
               {children}

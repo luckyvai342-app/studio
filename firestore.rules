@@ -1,4 +1,3 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -15,20 +14,22 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
-    // Rate Limiting Helper: Ensure 5 seconds between writes for financial safety
+    // Protection against replay attacks and rapid spamming
     function isNotRateLimited(userId) {
       let lastAction = get(/databases/$(database)/documents/users/$(userId)).data.lastActionAt;
-      return lastAction == null || duration.value(request.time - timestamp.date(lastAction)) > duration.value(5, 's');
+      return lastAction == null || duration.value(request.time - lastAction) > duration.value(2, 's');
     }
 
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
       
+      // Initial profile creation
       allow create: if isOwner(userId) 
                     && request.resource.data.walletBalance == 0;
       
-      // Allow balance updates ONLY via admin or system-triggered transactions
+      // PROTECTING WALLET: Only allow updating username/id/phone. 
+      // walletBalance can only be changed by Admin or a System Transaction (via Admin SDK)
       allow update: if isOwner(userId) 
                     && request.resource.data.walletBalance == resource.data.walletBalance
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'freeFireId', 'phone', 'lastActionAt'])
@@ -42,10 +43,11 @@ service cloud.firestore {
       match /participants/{userId} {
         allow read: if isAuthenticated();
         
-        // PROTECTION: Only allow joining if NOT already a participant
+        // Strict join logic validation
         allow create: if isOwner(userId) 
                       && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId))
-                      && request.resource.data.kills == 0; 
+                      && request.resource.data.kills == 0
+                      && isNotRateLimited(userId);
         
         allow update, delete: if isAdmin();
       }
@@ -54,7 +56,7 @@ service cloud.firestore {
     match /users/{userId}/transactions/{transactionId} {
       allow read: if isOwner(userId) || isAdmin();
       
-      // PROTECTION: Users can only create 'pending' deposits/withdrawals
+      // Users can only request pending financial actions
       allow create: if isOwner(userId) 
                     && request.resource.data.status == 'pending'
                     && (request.resource.data.type == 'deposit' || request.resource.data.type == 'withdrawal')
@@ -64,8 +66,9 @@ service cloud.firestore {
     }
 
     match /audit_logs/{logId} {
+      // Audit logs are read-only for admins to prevent record tampering
       allow read: if isAdmin();
-      // Users can write logs but never edit/delete them (Audit integrity)
+      // Users can append logs (system events) but never edit or delete
       allow create: if isAuthenticated();
       allow update, delete: if false;
     }

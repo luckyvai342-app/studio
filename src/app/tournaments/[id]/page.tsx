@@ -1,19 +1,18 @@
-
 "use client"
 
-import { useState, useEffect, use } from 'react';
+import { useState, use } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, Share2, Info, AlertTriangle, Loader2 } from 'lucide-react';
+import { Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, Share2, Info, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { PlaceHolderImages } from '@/lib/placeholder-images';
-import { Tournament } from '@/app/lib/types';
 import { useFirestore, useUser, useDoc } from '@/firebase';
 import { doc, runTransaction, serverTimestamp, collection } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -23,7 +22,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
   const { user: authUser } = useUser();
   const [isJoining, setIsJoining] = useState(false);
 
-  // Real-time data fetching
   const tournamentRef = doc(db, 'tournaments', resolvedParams.id);
   const { data: tournament, loading: tourneyLoading } = useDoc<any>(tournamentRef);
   
@@ -44,21 +42,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         const tourneyData = tDoc.data();
         const userData = uDoc.data();
         
-        // 1. Duplicate Join Protection
         const participantRef = doc(db, 'tournaments', tournament.id, 'participants', authUser.uid);
         const pDoc = await transaction.get(participantRef);
+        
         if (pDoc.exists()) throw new Error("Already joined this tournament");
-
-        // 2. Capacity Check
         if (tourneyData.joinedCount >= tourneyData.maxPlayers) throw new Error("Tournament is full");
-
-        // 3. Double Payment Protection (Balance Check)
         if (userData.walletBalance < tourneyData.entryFee) throw new Error("Insufficient balance");
 
-        // 4. Atomic Mutation
+        // ATOMIC UPDATES: Wallet + Capacity + Participant entry
         transaction.update(userProfileRef!, {
           walletBalance: userData.walletBalance - tourneyData.entryFee,
-          lastActionAt: new Date().toISOString()
+          lastActionAt: serverTimestamp()
         });
 
         transaction.update(tournamentRef, {
@@ -71,7 +65,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
           joinedAt: serverTimestamp()
         });
 
-        // 5. Audit Log (Fraud Detection)
         const logRef = doc(collection(db, 'audit_logs'));
         transaction.set(logRef, {
           userId: authUser.uid,
@@ -84,25 +77,29 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
       toast({ title: "Registration Successful!", description: "Welcome to the arena." });
     } catch (error: any) {
-      console.error(error);
-      toast({
-        variant: "destructive",
-        title: "Registration Failed",
-        description: error.message || "Something went wrong",
-      });
-      
-      // Log suspicious activity if it's a balance or duplicate issue
-      if (error.message.includes("Insufficient balance") || error.message.includes("Already joined")) {
-        const logRef = doc(collection(db, 'audit_logs'));
-        // In a real app, this would be a separate firestore write
+      if (error.code === 'permission-denied') {
+        const permissionError = new FirestorePermissionError({
+          path: tournamentRef.path,
+          operation: 'write',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Registration Failed",
+          description: error.message || "Something went wrong",
+        });
       }
     } finally {
       setIsJoining(false);
     }
   };
 
-  if (tourneyLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
+  if (tourneyLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
   if (!tournament) return <div className="p-8 text-center">Tournament not found</div>;
+
+  const isFull = tournament.joinedCount >= tournament.maxPlayers;
+  const canAfford = userProfile && userProfile.walletBalance >= tournament.entryFee;
 
   return (
     <div className="flex flex-col min-h-screen animate-fade-in pb-24">
@@ -186,7 +183,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             <Info className="w-5 h-5 text-primary" /> Tournament Rules
           </h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {tournament.description}
+            {tournament.description || "No specific rules provided for this tournament."}
           </p>
         </div>
       </div>
@@ -199,10 +196,10 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
           </div>
           <Button 
             className="flex-1 bg-primary hover:bg-primary/90 text-white font-bold h-12 shadow-lg shadow-primary/20"
-            disabled={isJoining || (userProfile && userProfile.walletBalance < tournament.entryFee)}
+            disabled={isJoining || isFull || !canAfford}
             onClick={handleJoin}
           >
-            {isJoining ? <Loader2 className="animate-spin" /> : `PAY ₹${tournament.entryFee} TO JOIN`}
+            {isJoining ? <Loader2 className="animate-spin" /> : isFull ? 'TOURNAMENT FULL' : `PAY ₹${tournament.entryFee} TO JOIN`}
           </Button>
         </div>
       </div>
