@@ -11,9 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { generateMatchRecap } from '@/ai/flows/ai-powered-match-recap-generation';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection } from '@/firebase';
-import { collectionGroup, query, where, doc, runTransaction, serverTimestamp, orderBy } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { collectionGroup, query, where, doc, runTransaction, serverTimestamp, orderBy, collection } from 'firebase/firestore';
+import { approveWithdrawalAction } from '@/app/actions';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -22,7 +21,6 @@ export default function AdminDashboard() {
   const [recapResult, setRecapResult] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  // Fetch all pending withdrawal requests across all users using Collection Group Query
   const pendingWithdrawalsQuery = useMemo(() => {
     return query(
       collectionGroup(db, 'transactions'),
@@ -39,57 +37,21 @@ export default function AdminDashboard() {
     setProcessingId(tx.id);
 
     try {
-      await runTransaction(db, async (transaction) => {
-        const userRef = doc(db, 'users', tx.userId);
-        // Path to the specific transaction doc in sub-collection
-        const txRef = doc(db, 'users', tx.userId, 'transactions', tx.id);
-        
-        const userDoc = await transaction.get(userRef);
-        const transactionDoc = await transaction.get(txRef);
-
-        if (!userDoc.exists()) throw new Error("User not found");
-        if (!transactionDoc.exists()) throw new Error("Transaction request not found");
-        
-        const txData = transactionDoc.data();
-        if (txData.status !== 'pending') throw new Error("Request is already processed");
-        
-        const currentBalance = userDoc.data().walletBalance || 0;
-        if (currentBalance < txData.amount) throw new Error("User has insufficient funds for this payout");
-
-        // 1. Deduct walletBalance
-        transaction.update(userRef, {
-          walletBalance: currentBalance - txData.amount,
-          lastActionAt: serverTimestamp()
+      // Call secure server action to process Stripe transfer and Wallet deduction
+      const result = await approveWithdrawalAction(tx.id, tx.userId, tx.amount);
+      
+      if (result.success) {
+        toast({ 
+          title: "Withdrawal Successful", 
+          description: `₹${tx.amount} paid via Stripe. ID: ${result.transferId}` 
         });
-
-        // 2. Update status to 'completed' (Approved)
-        transaction.update(txRef, {
-          status: 'completed',
-          updatedAt: serverTimestamp()
-        });
-
-        // 3. Log Audit
-        const auditRef = doc(collection(db, 'audit_logs'));
-        transaction.set(auditRef, {
-          userId: tx.userId,
-          action: 'WITHDRAWAL_APPROVED',
-          details: `Approved payout of ₹${txData.amount} for user ${tx.userId}`,
-          severity: 'info',
-          timestamp: serverTimestamp()
-        });
-      });
-
-      toast({ title: "Withdrawal Approved", description: `₹${tx.amount} has been deducted from the user's wallet.` });
-    } catch (error: any) {
-      if (error.code === 'permission-denied') {
-        const permissionError = new FirestorePermissionError({
-          path: `/users/${tx.userId}/transactions/${tx.id}`,
-          operation: 'write',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      } else {
-        toast({ variant: "destructive", title: "Approval Failed", description: error.message || "Something went wrong" });
       }
+    } catch (error: any) {
+      toast({ 
+        variant: "destructive", 
+        title: "Approval Failed", 
+        description: error.message || "Something went wrong" 
+      });
     } finally {
       setProcessingId(null);
     }
@@ -155,7 +117,6 @@ export default function AdminDashboard() {
       </header>
 
       <div className="space-y-6">
-        {/* Real-time Withdrawal Approvals */}
         <Card className="bg-card/40 border-white/5">
           <CardHeader className="p-4 border-b border-white/5">
             <CardTitle className="text-sm font-headline flex items-center justify-between">
@@ -199,7 +160,7 @@ export default function AdminDashboard() {
                         disabled={!!processingId}
                         onClick={() => handleApproveWithdrawal(tx)}
                       >
-                        {processingId === tx.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve'}
+                        {processingId === tx.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve & Pay'}
                       </Button>
                     </div>
                   </div>
@@ -209,7 +170,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* AI Recap Tool */}
         <Card className="bg-card/40 border-white/5 overflow-hidden">
           <CardHeader className="bg-primary/10 p-4">
             <CardTitle className="text-sm font-headline flex items-center gap-2">
@@ -235,7 +195,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Quick Report */}
         <Card className="bg-card/40 border-white/5">
           <CardHeader className="p-4">
             <CardTitle className="text-sm font-headline">Report Match Result</CardTitle>
