@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Helpers
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    // User Profile Rules
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin(); // Prevent mass user enumeration
+      
+      // Allow creation only if the user is authenticated as themselves
+      // and they aren't starting with an arbitrary balance.
+      allow create: if isOwner(userId) 
+                    && request.resource.data.walletBalance == 0;
+      
+      // Prevent wallet manipulation: Users can update profile info but NOT balance
+      allow update: if isOwner(userId) 
+                    && request.resource.data.walletBalance == resource.data.walletBalance
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'freeFireId', 'phone'])
+                    || isAdmin();
+    }
+
+    // Tournament Rules
+    match /tournaments/{tournamentId} {
+      // Authenticated users can read tournament details
+      allow read: if isAuthenticated();
+      
+      // Only admins can create or modify tournament metadata
+      allow write: if isAdmin();
+
+      // Participants Sub-collection
+      match /participants/{userId} {
+        // Anyone can see the leaderboard/participants
+        allow read: if isAuthenticated();
+        
+        // Users can join a tournament (create their own entry)
+        // But they can't modify results or placements
+        allow create: if isOwner(userId) 
+                      && request.resource.data.kills == 0; 
+        
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Transaction Rules (Financial Safety)
+    match /users/{userId}/transactions/{transactionId} {
+      // Users can only see their own history
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Users can request a deposit or withdrawal
+      // They MUST set the status to 'pending'
+      allow create: if isOwner(userId) 
+                    && request.resource.data.status == 'pending'
+                    && (request.resource.data.type == 'deposit' || request.resource.data.type == 'withdrawal');
+      
+      // Once created, only admins can process/update/delete transactions
+      allow update, delete: if isAdmin();
+    }
+  }
+}

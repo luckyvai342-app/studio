@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "UserProfile": {
@@ -72,5 +71,6 @@
       "schema": "#/entities/Transaction",
       "description": "User financial history"
     }
-  }
+  },
+  "_comment": "Security rules optimized for wallet protection and mass-read prevention."
 }
