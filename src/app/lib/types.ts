@@ -1,5 +1,5 @@
 
-export type TournamentStatus = 'open' | 'ongoing' | 'completed';
+export type TournamentStatus = 'open' | 'ongoing' | 'completed' | 'cancelled';
 
 export interface Tournament {
   id: string;
@@ -14,6 +14,9 @@ export interface Tournament {
   map: string;
   type: 'Solo' | 'Duo' | 'Squad';
   imageUrl: string;
+  roomId?: string;
+  roomPassword?: string;
+  resultsUploaded?: boolean;
 }
 
 export interface User {
@@ -23,6 +26,7 @@ export interface User {
   gameUid: string;
   gameRegion?: string;
   accountVerified: boolean;
+  status: 'active' | 'suspended' | 'banned';
   phone: string;
   walletBalance: number;
   lastUidUpdate?: string;
@@ -33,18 +37,21 @@ export interface Transaction {
   id: string;
   userId: string;
   amount: number;
-  type: 'deposit' | 'withdrawal' | 'entry_fee' | 'prize';
+  type: 'deposit' | 'withdrawal' | 'entry_fee' | 'prize' | 'refund';
   status: 'pending' | 'completed' | 'failed';
   createdAt: string;
   referenceId?: string;
 }
 
 export interface Participant {
+  id: string;
   userId: string;
   username: string;
   gameUid: string;
   gameUsername: string;
   kills: number;
-  damage: number;
+  damage?: number;
   placement: number;
+  prizeWon?: number;
+  joinedAt: string;
 }

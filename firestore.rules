@@ -14,28 +14,18 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.admin == true;
-    }
-
-    // Protection against rapid spamming
-    function isNotRateLimited(userId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(userId));
-      return !exists(/databases/$(database)/documents/users/$(userId)) || 
-             userDoc.data.lastActionAt == null || 
-             duration.value(request.time - timestamp.value(userDoc.data.lastActionAt)) > duration.value(2, 's');
-    }
-
-    // Validation for Battle Account Cooldown (24 hours)
-    function canUpdateUid(userId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(userId));
-      return userDoc.data.lastUidUpdate == null || 
-             duration.value(request.time - timestamp.value(userDoc.data.lastUidUpdate)) > duration.value(24, 'h');
+      // In a prototype, we can check for a specific UID or a collection of admins
+      // Real prod would use custom claims: request.auth.token.admin == true;
+      return isAuthenticated() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) || 
+        request.auth.token.admin == true
+      );
     }
 
     // --- User Profile Rules ---
     
     match /users/{userId} {
-      allow get: if isAuthenticated(); // Allow search by gameUid for verification
+      allow get: if isAuthenticated();
       allow list: if isAdmin();
       
       allow create: if isOwner(userId) 
@@ -44,11 +34,9 @@ service cloud.firestore {
       
       allow update: if (
         isOwner(userId) 
-        // Prevent manual balance edits
         && request.resource.data.walletBalance == resource.data.walletBalance
         && request.resource.data.accountVerified == resource.data.accountVerified
-        // Enforce 24h cooldown if UID is changed
-        && (request.resource.data.gameUid == resource.data.gameUid || canUpdateUid(userId))
+        && request.resource.data.status == resource.data.status
       ) || isAdmin();
     }
 
@@ -60,32 +48,41 @@ service cloud.firestore {
 
       match /participants/{userId} {
         allow read: if isAuthenticated();
-        
         allow create: if isOwner(userId) 
                       && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId))
-                      && request.resource.data.kills == 0
-                      // Ensure Battle Account is linked before joining
-                      && get(/databases/$(database)/documents/users/$(userId)).data.gameUid != null;
-        
+                      && request.resource.data.kills == 0;
         allow update, delete: if isAdmin();
       }
     }
+
+    // --- Transaction Rules ---
 
     match /users/{userId}/transactions/{transactionId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && request.resource.data.type == 'withdrawal';
       allow update, delete: if isAdmin();
     }
-
+    
     match /paymentOrders/{orderId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update: if isAdmin();
     }
 
+    // --- Admin & System Rules ---
+
+    match /admins/{adminId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only manageable via Firebase Console or special script
+    }
+
     match /audit_logs/{logId} {
       allow read: if isAdmin();
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated(); // Allow recording system events
+    }
+    
+    match /webhook_events/{eventId} {
+      allow read, write: if false; // Backend only
     }
   }
 }
