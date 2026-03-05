@@ -14,8 +14,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     const checkAuth = () => {
       const userStr = localStorage.getItem('ff_user');
       const isLoginPage = pathname === '/login';
+      // Allow Home and Tournament list to be public for better conversion
+      const isPublicPage = pathname === '/' || pathname === '/tournaments' || isLoginPage;
 
-      if (!userStr && !isLoginPage) {
+      if (!userStr && !isPublicPage) {
         router.replace('/login');
       } else if (userStr && isLoginPage) {
         router.replace('/');

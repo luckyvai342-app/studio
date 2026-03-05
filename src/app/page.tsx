@@ -1,21 +1,26 @@
+
 "use client"
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { Trophy, Users, Zap, Bell, ChevronRight, Loader2, ArrowUpRight } from 'lucide-react';
+import { Trophy, Users, Zap, Bell, ChevronRight, Loader2, ArrowUpRight, LogOut, User as UserIcon, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, limit, orderBy, doc } from 'firebase/firestore';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
   const db = useFirestore();
-  const { user: authUser } = useUser();
+  const router = useRouter();
+  const { user: authUser, loading: authLoading } = useUser();
   const heroImg = PlaceHolderImages.find(img => img.id === 'hero-gaming');
+  const avatarPlaceholder = PlaceHolderImages.find(img => img.id === 'avatar-user');
 
   // Real-time user profile for wallet balance
   const userProfileRef = authUser ? doc(db, 'users', authUser.uid) : null;
@@ -29,32 +34,80 @@ export default function Home() {
     );
   }, [db]);
 
-  const { data: tournaments, loading } = useCollection<any>(tournamentsQuery);
+  const { data: tournaments, loading: tourneysLoading } = useCollection<any>(tournamentsQuery);
+
+  const handleLogout = () => {
+    localStorage.removeItem('ff_user');
+    window.location.href = '/login';
+  };
 
   return (
     <div className="flex flex-col min-h-screen animate-in-fade bg-[#0D0D0D]">
-      {/* Sticky Header with Wallet Visibility */}
-      <header className="p-4 flex justify-between items-center bg-[#0D0D0D]/80 sticky top-0 z-50 backdrop-blur-xl border-b border-white/5">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center rotate-3 shadow-[0_0_20px_rgba(0,255,136,0.4)]">
-            <Zap className="text-black w-6 h-6 -rotate-3 fill-black" />
-          </div>
-          <h1 className="text-xl font-headline font-bold gradient-text uppercase tracking-tighter">INDIA X E-SPORT</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl hover:bg-white/5">
-            <Bell className="w-5 h-5 text-muted-foreground" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-background animate-pulse" />
-          </Button>
-          <Link href="/wallet" className="flex items-center gap-2 bg-primary/10 pl-3 pr-1 py-1 rounded-xl border border-primary/20 group hover:border-primary/50 transition-colors">
-            <span className="text-xs font-black text-primary">
-              ₹{userProfile?.walletBalance !== undefined ? userProfile.walletBalance.toLocaleString() : '---'}
-            </span>
-            <div className="bg-primary p-1 rounded-lg">
-              <ArrowUpRight className="w-3 h-3 text-black" />
+      {/* Sticky Header with Profile and Wallet */}
+      <header className="p-4 flex flex-col gap-4 bg-[#0D0D0D]/80 sticky top-0 z-50 backdrop-blur-xl border-b border-white/5">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center rotate-3 shadow-[0_0_15px_rgba(0,255,136,0.4)]">
+              <Zap className="text-black w-5 h-5 -rotate-3 fill-black" />
             </div>
-          </Link>
+            <h1 className="text-lg font-headline font-bold gradient-text uppercase tracking-tighter">X-ESPORT</h1>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {authUser ? (
+              <>
+                <Link href="/wallet" className="flex items-center gap-2 bg-primary/10 pl-3 pr-1 py-1 rounded-xl border border-primary/20 group hover:border-primary/50 transition-colors">
+                  <span className="text-[10px] font-black text-primary">
+                    ₹{userProfile?.walletBalance !== undefined ? userProfile.walletBalance.toLocaleString() : '...'}
+                  </span>
+                  <div className="bg-primary p-1 rounded-lg">
+                    <ArrowUpRight className="w-2.5 h-2.5 text-black" />
+                  </div>
+                </Link>
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white/5" onClick={handleLogout}>
+                  <LogOut className="w-4 h-4 text-rose-500" />
+                </Button>
+              </>
+            ) : (
+              <Button 
+                variant="default" 
+                size="sm" 
+                className="bg-primary text-black font-black h-9 rounded-xl px-4 flex gap-2"
+                onClick={() => router.push('/login')}
+              >
+                <LogIn className="w-4 h-4" /> LOGIN
+              </Button>
+            )}
+          </div>
         </div>
+
+        {/* User Identity Bar */}
+        {authUser && (
+          <div className="flex items-center justify-between bg-white/5 p-2 rounded-2xl border border-white/5">
+            <Link href="/profile" className="flex items-center gap-3">
+              <Avatar className="h-8 w-8 rounded-xl border border-white/10">
+                <AvatarImage src={avatarPlaceholder?.imageUrl} />
+                <AvatarFallback className="bg-primary/20 text-primary">
+                  <UserIcon className="w-4 h-4" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-white uppercase tracking-wider leading-none">
+                  {userProfile?.username || 'WARRIOR'}
+                </span>
+                <span className="text-[8px] text-primary font-bold uppercase tracking-widest mt-0.5">
+                  LVL {Math.floor((userProfile?.matchesPlayed || 0) / 10) + 1} • {userProfile?.role || 'User'}
+                </span>
+              </div>
+            </Link>
+            <Link href="/notifications">
+              <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-lg hover:bg-white/10">
+                <Bell className="w-4 h-4 text-muted-foreground" />
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full border border-background animate-pulse" />
+              </Button>
+            </Link>
+          </div>
+        )}
       </header>
 
       {/* Featured Hero */}
@@ -124,7 +177,7 @@ export default function Home() {
           </Link>
         </div>
         
-        {loading ? (
+        {tourneysLoading ? (
           <div className="space-y-4">
             {[1, 2].map((i) => (
               <div key={i} className="h-64 bg-white/5 rounded-[2rem] shimmer" />
