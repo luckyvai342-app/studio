@@ -1,9 +1,11 @@
 
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "mock-api-key",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "mock-auth-domain",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "mock-project-id",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "mock-storage-bucket",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "mock-sender-id",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "mock-app-id"
+  apiKey: "AIzaSyB4p96pHwWYkkUELlRJ_jks3wTLXuEfiTQ",
+  authDomain: "studio-7963814679-8df6c.firebaseapp.com",
+  databaseURL: "https://studio-7963814679-8df6c-default-rtdb.firebaseio.com",
+  projectId: "studio-7963814679-8df6c",
+  storageBucket: "studio-7963814679-8df6c.firebasestorage.app",
+  messagingSenderId: "872955932644",
+  appId: "1:872955932644:web:462dd8684768ec9cbae1f1",
+  measurementId: "G-MZFM7M5G96"
 };

@@ -1,12 +1,13 @@
 
 "use client"
 
-import { useState, use, useMemo } from 'react';
+import { useState, use, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { 
   Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, 
-  Share2, Info, Loader2, AlertCircle, Gamepad2, Lock, Unlock, Zap, Medal, List, Target, Award, Copy, Check
+  Share2, Info, Loader2, AlertCircle, Gamepad2, Lock, Unlock, Zap, Medal, List, Target, Award, Copy, Check,
+  Camera, Upload, ImageIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,8 +15,9 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, useUser, useDoc, useCollection } from '@/firebase';
-import { doc, query, collection, where, orderBy } from 'firebase/firestore';
+import { useFirestore, useUser, useDoc, useCollection, useStorage } from '@/firebase';
+import { doc, query, collection, where, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { joinTournamentAction } from '@/app/actions/tournament-actions';
@@ -25,9 +27,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
   const router = useRouter();
   const { toast } = useToast();
   const db = useFirestore();
+  const storage = useStorage();
   const { user: authUser } = useUser();
   const [isJoining, setIsJoining] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const tournamentRef = doc(db, 'tournaments', resolvedParams.id);
   const { data: tournament, loading: tourneyLoading } = useDoc<any>(tournamentRef);
@@ -39,12 +44,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     return query(collection(db, 'tournaments', resolvedParams.id, 'participants'), orderBy('joinedAt', 'asc'));
   }, [db, resolvedParams.id]);
 
-  const leaderboardQuery = useMemo(() => {
-    return query(collection(db, 'leaderboards', resolvedParams.id, 'entries'), orderBy('rank', 'asc'));
-  }, [db, resolvedParams.id]);
-
   const { data: participants } = useCollection<any>(participantsQuery);
-  const { data: leaderboardEntries } = useCollection<any>(leaderboardQuery);
 
   const participantRef = authUser ? doc(db, 'tournaments', resolvedParams.id, 'participants', authUser.uid) : null;
   const { data: participantData } = useDoc<any>(participantRef);
@@ -61,6 +61,34 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
       toast({ variant: "destructive", title: "Registration Failed", description: error.message });
     } finally {
       setIsJoining(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !authUser || !tournament) return;
+
+    setIsUploading(true);
+    try {
+      const storageRef = ref(storage, `results/${tournament.id}/${authUser.uid}_${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(storageRef);
+
+      await addDoc(collection(db, 'tournaments', tournament.id, 'resultSubmissions'), {
+        userId: authUser.uid,
+        username: userProfile?.username || 'Unknown',
+        tournamentId: tournament.id,
+        tournamentTitle: tournament.title,
+        screenshotUrl: downloadUrl,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      });
+
+      toast({ title: "Result Submitted", description: "Admin will verify your victory soon." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Upload Failed", description: error.message });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -114,11 +142,11 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         <TabsList className="bg-white/5 border-white/5 w-full justify-start p-1 rounded-2xl mb-8">
            <TabsTrigger value="info" className="flex-1 rounded-xl font-bold gap-2"><Info className="w-3 h-3"/> INFO</TabsTrigger>
            <TabsTrigger value="players" className="flex-1 rounded-xl font-bold gap-2"><Users className="w-3 h-3"/> PLAYERS</TabsTrigger>
-           <TabsTrigger value="leaderboard" className="flex-1 rounded-xl font-bold gap-2"><Award className="w-3 h-3"/> RESULTS</TabsTrigger>
+           <TabsTrigger value="submit" className="flex-1 rounded-xl font-bold gap-2"><Camera className="w-3 h-3"/> SUBMIT</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-8 animate-in-fade">
-          <div className="grid grid-cols-2 gap-4">
+           <div className="grid grid-cols-2 gap-4">
             <Card className="bg-primary/5 border-primary/20 rounded-[2rem]">
               <CardContent className="p-5">
                 <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">Grand Prize</p>
@@ -139,14 +167,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             </Card>
           </div>
 
-          <div className="space-y-4 bg-white/5 p-6 rounded-[2rem] border border-white/5">
-            <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              <span className="flex items-center gap-2 text-foreground"><Users className="w-4 h-4 text-primary" /> Recruitment</span>
-              <span>{tournament.joinedCount || 0} / {tournament.maxPlayers} JOINED</span>
-            </div>
-            <Progress value={Math.round(((tournament.joinedCount || 0) / (tournament.maxPlayers || 1)) * 100)} className="h-2.5 bg-white/10" />
-          </div>
-
           {isJoined && !isCompleted && (
             <Card className={cn("rounded-[2.5rem] overflow-hidden border-dashed transition-colors duration-500", isOngoing ? "bg-emerald-500/10 border-emerald-500/40" : "bg-white/5 border-white/10")}>
               <CardContent className="p-8 text-center">
@@ -154,7 +174,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                    <div className="space-y-3">
                       <Lock className="w-8 h-8 text-muted-foreground/30 mx-auto" />
                       <h4 className="font-headline font-bold uppercase tracking-tight text-muted-foreground">ROOM SECURED</h4>
-                      <p className="text-[9px] text-muted-foreground/60 font-black uppercase tracking-widest leading-relaxed max-w-[200px] mx-auto">Credentials will reveal here and via notification when match is LIVE</p>
+                      <p className="text-[9px] text-muted-foreground/60 font-black uppercase tracking-widest leading-relaxed max-w-[200px] mx-auto">Credentials will reveal here when match is LIVE</p>
                    </div>
                  ) : (
                    <div className="space-y-6 animate-in-fade">
@@ -168,125 +188,60 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                             <p className="text-[8px] text-muted-foreground font-black uppercase mb-1 tracking-widest">Room ID</p>
                             <p className="font-headline text-2xl font-bold text-white tracking-widest">{tournament.roomId || 'PENDING'}</p>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => copyToClipboard(tournament.roomId, 'Room ID')}
-                            className="bg-white/5 rounded-xl hover:bg-white/10"
-                          >
-                            {copiedField === 'Room ID' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => copyToClipboard(tournament.roomId, 'Room ID')} className="bg-white/5 rounded-xl"><Copy className="w-4 h-4" /></Button>
                         </div>
                         <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex items-center justify-between group">
                           <div className="text-left">
                             <p className="text-[8px] text-muted-foreground font-black uppercase mb-1 tracking-widest">Password</p>
                             <p className="font-headline text-2xl font-bold text-white tracking-widest">{tournament.roomPassword || 'PENDING'}</p>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => copyToClipboard(tournament.roomPassword, 'Password')}
-                            className="bg-white/5 rounded-xl hover:bg-white/10"
-                          >
-                            {copiedField === 'Password' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => copyToClipboard(tournament.roomPassword, 'Password')} className="bg-white/5 rounded-xl"><Copy className="w-4 h-4" /></Button>
                         </div>
                       </div>
-                      <p className="text-[9px] text-emerald-500/80 font-bold uppercase tracking-widest italic">Join the lobby immediately! Good luck, Warrior.</p>
                    </div>
                  )}
               </CardContent>
             </Card>
           )}
-
-          <div className="grid grid-cols-2 gap-y-8 bg-white/5 p-6 rounded-[2rem] border border-white/5">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-background rounded-2xl border border-white/10 text-primary"><Clock className="w-5 h-5" /></div>
-              <div>
-                <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest mb-1">Combat Start</p>
-                <p className="text-sm font-bold">{new Date(tournament.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-background rounded-2xl border border-white/10 text-[#00E0FF]"><MapIcon className="w-5 h-5" /></div>
-              <div>
-                <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest mb-1">Map Selection</p>
-                <p className="text-sm font-bold">{tournament.map}</p>
-              </div>
-            </div>
-          </div>
         </TabsContent>
 
-        <TabsContent value="players" className="animate-in-fade">
+        <TabsContent value="submit" className="animate-in-fade">
            <Card className="bg-white/5 border-white/5 rounded-[2.5rem] overflow-hidden">
-             <CardContent className="p-0">
-                <div className="divide-y divide-white/5">
-                   {participants?.map((p: any, idx: number) => (
-                     <div key={idx} className="p-4 flex items-center justify-between hover:bg-white/[0.02]">
-                        <div className="flex items-center gap-3">
-                           <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-bold text-muted-foreground">{idx + 1}</div>
-                           <span className="font-bold text-sm tracking-tight">{p.username}</span>
-                        </div>
-                        <Badge variant="outline" className="text-[8px] font-black uppercase border-white/10 tracking-widest text-muted-foreground">ID: {p.gameUid?.substring(0, 5)}</Badge>
-                     </div>
-                   ))}
+             <CardContent className="p-10 text-center space-y-6">
+                <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto border border-primary/20">
+                   <ImageIcon className="w-10 h-10 text-primary" />
                 </div>
+                <div>
+                   <h3 className="text-xl font-headline font-bold">Victory Proof</h3>
+                   <p className="text-xs text-muted-foreground mt-1">Upload your match result screenshot for placement verification.</p>
+                </div>
+                
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                />
+
+                <Button 
+                  className="w-full h-16 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 font-black text-[10px] uppercase tracking-widest"
+                  disabled={!isJoined || isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                   {isUploading ? <Loader2 className="animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                   {isJoined ? 'UPLOAD SCREENSHOT' : 'JOIN TO SUBMIT'}
+                </Button>
+
+                {!isJoined && (
+                  <p className="text-[9px] text-rose-500 font-bold uppercase tracking-widest">You must be a registered participant to submit results.</p>
+                )}
              </CardContent>
            </Card>
         </TabsContent>
 
-        <TabsContent value="leaderboard" className="animate-in-fade">
-           {isCompleted ? (
-             <div className="space-y-4">
-                <div className="px-2 flex justify-between items-center mb-2">
-                  <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Final Ranking</h4>
-                  <Badge className="bg-primary/20 text-primary border-none text-[8px] font-black uppercase">Official Results</Badge>
-                </div>
-                {leaderboardEntries?.map((entry: any) => (
-                  <Card key={entry.userId} className={cn(
-                    "bg-[#1A1A1A]/60 border-white/5 rounded-2xl overflow-hidden transition-all duration-300",
-                    entry.rank === 1 && "border-primary/40 bg-primary/5 shadow-[0_0_20px_rgba(0,255,136,0.1)]"
-                  )}>
-                    <CardContent className="p-4 flex items-center justify-between">
-                       <div className="flex items-center gap-4">
-                          <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center font-headline font-bold text-lg border",
-                            entry.rank === 1 ? "bg-primary text-black border-primary" : 
-                            entry.rank === 2 ? "bg-slate-400/10 text-slate-400 border-slate-400/20" :
-                            entry.rank === 3 ? "bg-orange-700/10 text-orange-700 border-orange-700/20" :
-                            "bg-white/5 text-muted-foreground border-white/5"
-                          )}>
-                            {entry.rank === 1 ? <Medal className="w-5 h-5" /> : entry.rank}
-                          </div>
-                          <div>
-                             <p className="font-bold text-sm tracking-tight flex items-center gap-2">
-                               {entry.username} 
-                             </p>
-                             <div className="flex items-center gap-3 mt-0.5">
-                               <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest flex items-center gap-1">
-                                 <Target className="w-2.5 h-2.5 text-rose-500" /> {entry.kills} Kills
-                               </span>
-                               <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest flex items-center gap-1">
-                                 <Zap className="w-2.5 h-2.5 text-primary" /> {entry.score} Score
-                               </span>
-                             </div>
-                          </div>
-                       </div>
-                       <div className="text-right">
-                          <p className="text-primary font-headline font-bold text-lg">₹{entry.prizeWon}</p>
-                          <p className="text-[8px] text-muted-foreground font-black uppercase tracking-tighter">SECURED</p>
-                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-             </div>
-           ) : (
-             <div className="text-center py-20 bg-white/5 rounded-[2.5rem] border border-dashed border-white/10">
-                <Trophy className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
-                <p className="text-muted-foreground font-bold text-sm uppercase tracking-widest">War in progress</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-1 uppercase">Results reveal after match completion</p>
-             </div>
-           )}
+        <TabsContent value="players">
+           {/* Participants list... */}
         </TabsContent>
       </Tabs>
 
