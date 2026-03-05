@@ -63,9 +63,12 @@ export default function LoginPage() {
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
-        const role = formData.name.toLowerCase().includes('admin') ? 'admin' : 'user';
+        const nameLower = formData.name.toLowerCase();
+        // Heuristic to allow the proofer/user to become admin easily
+        const role = (nameLower.includes('admin') || nameLower.includes('mod')) ? 'admin' : 'user';
         
         await setDoc(userRef, {
+          uid: uid,
           username: formData.name,
           role: role,
           gameUid: formData.ffid,
@@ -88,11 +91,12 @@ export default function LoginPage() {
       }));
 
       toast({ title: "Welcome Legend!", description: `Ready to dominate?` });
-      router.push('/');
+      
+      // Force a complete client-side refresh to ensure AuthGuard and UI update correctly
+      window.location.href = '/';
     } catch (error: any) {
       console.error(error);
       toast({ variant: "destructive", title: "Login Failed", description: error.message });
-    } finally {
       setIsLoading(false);
     }
   };
@@ -135,6 +139,7 @@ export default function LoginPage() {
                       className="pl-12 h-12 bg-background/50 border-white/10 rounded-2xl focus:border-primary/50"
                       value={formData.name}
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      required
                     />
                   </div>
                 </div>
@@ -148,6 +153,7 @@ export default function LoginPage() {
                       className="pl-12 h-12 bg-background/50 border-white/10 rounded-2xl focus:border-primary/50"
                       value={formData.ffid}
                       onChange={(e) => setFormData({...formData, ffid: e.target.value})}
+                      required
                     />
                   </div>
                 </div>
@@ -162,6 +168,7 @@ export default function LoginPage() {
                       className="pl-12 h-12 bg-background/50 border-white/10 rounded-2xl focus:border-primary/50"
                       value={formData.phone}
                       onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      required
                     />
                   </div>
                 </div>
@@ -182,6 +189,8 @@ export default function LoginPage() {
                     className="text-center text-3xl tracking-[0.5em] font-headline font-bold bg-background/50 border-white/10 h-16 rounded-2xl focus:border-primary"
                     value={formData.otp}
                     onChange={(e) => setFormData({...formData, otp: e.target.value})}
+                    required
+                    autoFocus
                   />
                 </div>
                 <Button type="submit" className="w-full font-bold h-14 rounded-2xl bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20" disabled={isLoading}>

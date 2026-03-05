@@ -54,7 +54,9 @@ export default function Home() {
           </div>
           
           <div className="flex items-center gap-2">
-            {authUser ? (
+            {authLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            ) : authUser ? (
               <>
                 <Link href="/wallet" className="flex items-center gap-2 bg-primary/10 pl-3 pr-1 py-1 rounded-xl border border-primary/20 group hover:border-primary/50 transition-colors">
                   <span className="text-[10px] font-black text-primary">
@@ -69,20 +71,21 @@ export default function Home() {
                 </Button>
               </>
             ) : (
-              <Button 
-                variant="default" 
-                size="sm" 
-                className="bg-primary text-black font-black h-9 rounded-xl px-4 flex gap-2"
-                onClick={() => router.push('/login')}
-              >
-                <LogIn className="w-4 h-4" /> LOGIN
-              </Button>
+              <Link href="/login">
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  className="bg-primary text-black font-black h-9 rounded-xl px-4 flex gap-2 shadow-[0_0_15px_rgba(0,255,136,0.2)]"
+                >
+                  <LogIn className="w-4 h-4" /> LOGIN
+                </Button>
+              </Link>
             )}
           </div>
         </div>
 
         {/* User Identity Bar */}
-        {authUser && (
+        {!authLoading && authUser && (
           <div className="flex items-center justify-between bg-white/5 p-2 rounded-2xl border border-white/5">
             <Link href="/profile" className="flex items-center gap-3">
               <Avatar className="h-8 w-8 rounded-xl border border-white/10">
