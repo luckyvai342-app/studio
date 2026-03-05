@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { 
   LayoutDashboard, Trophy, Users, Wallet, ShieldAlert, History, 
   Settings, Loader2, CheckCircle, XCircle, AlertTriangle, 
-  Search, Plus, Eye, DollarSign, Ban, RefreshCw, Save, Upload
+  Search, Plus, Eye, DollarSign, Ban, RefreshCw, Save, Upload, Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,7 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { approveWithdrawalAction } from '@/app/actions';
-import { distributePrizesAction, refundTournamentAction, createTournamentAction } from '@/app/actions/admin-actions';
+import { distributePrizesAction, refundTournamentAction, createTournamentAction, distributeRoomDetailsAction } from '@/app/actions/admin-actions';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -32,6 +32,10 @@ export default function AdminDashboard() {
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   
+  // Room Distribution State
+  const [roomDistTourney, setRoomDistTourney] = useState<any>(null);
+  const [roomDetails, setRoomDetails] = useState({ roomId: '', password: '' });
+
   // Results Entry State
   const [activeResultsTourney, setActiveResultsTourney] = useState<any>(null);
   const [playerResults, setPlayerResults] = useState<any[]>([]);
@@ -115,6 +119,21 @@ export default function AdminDashboard() {
       setActiveResultsTourney(null);
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error submitting results", description: e.message });
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
+  const handleDistributeRoom = async () => {
+    if (!roomDistTourney || !authUser || !roomDetails.roomId) return;
+    setIsProcessing('distributing-room');
+    try {
+      await distributeRoomDetailsAction(roomDistTourney.id, authUser.uid, roomDetails.roomId, roomDetails.password);
+      toast({ title: "Intelligence Dispatched", description: "Room credentials sent to all warriors." });
+      setRoomDistTourney(null);
+      setRoomDetails({ roomId: '', password: '' });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Intel Fail", description: e.message });
     } finally {
       setIsProcessing(null);
     }
@@ -247,6 +266,16 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {!t.roomDistributed && t.status !== 'completed' && t.status !== 'cancelled' && (
+                        <Button 
+                          size="sm" 
+                          variant="secondary"
+                          className="rounded-xl h-10 font-bold gap-2"
+                          onClick={() => setRoomDistTourney(t)}
+                        >
+                          <Zap className="w-3 h-3 text-primary" /> Go Live
+                        </Button>
+                      )}
                       {!t.resultsUploaded && t.status !== 'cancelled' && (
                         <Button 
                           size="sm" 
@@ -273,6 +302,31 @@ export default function AdminDashboard() {
               ))
             }
           </div>
+
+          {/* Room Distribution Modal */}
+          <Dialog open={!!roomDistTourney} onOpenChange={() => setRoomDistTourney(null)}>
+            <DialogContent className="bg-[#1A1A1A] border-white/5 rounded-[2.5rem] max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-headline font-bold">Broadcast Room Intel</DialogTitle>
+                <DialogDescription>Distribute credentials to all warriors in {roomDistTourney?.title}.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Room ID</Label>
+                  <Input value={roomDetails.roomId} onChange={e => setRoomDetails({...roomDetails, roomId: e.target.value})} placeholder="e.g. 5293810" className="bg-background/50 border-white/10" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Password</Label>
+                  <Input value={roomDetails.password} onChange={e => setRoomDetails({...roomDetails, password: e.target.value})} placeholder="e.g. 1234" className="bg-background/50 border-white/10" />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button className="w-full bg-primary text-black font-black rounded-xl h-12" onClick={handleDistributeRoom} disabled={isProcessing === 'distributing-room'}>
+                  {isProcessing === 'distributing-room' ? <Loader2 className="animate-spin" /> : 'BRDCST & GO LIVE'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Results Entry Modal */}
           <Dialog open={!!activeResultsTourney} onOpenChange={() => setActiveResultsTourney(null)}>
@@ -365,7 +419,7 @@ export default function AdminDashboard() {
                         <div className="flex gap-3">
                           <Button 
                             className="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold px-6"
-                            onClick={() => handleApproveWithdrawal(tx)}
+                            onClick={() => approveWithdrawalAction(tx.id, tx.userId, tx.amount)}
                             disabled={isProcessing === tx.id}
                           >
                             {isProcessing === tx.id ? <Loader2 className="animate-spin w-4 h-4" /> : 'Approve & Deduct'}

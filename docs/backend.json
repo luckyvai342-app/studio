@@ -38,37 +38,21 @@
         "imageUrl": { "type": "string" },
         "roomId": { "type": "string" },
         "roomPassword": { "type": "string" },
+        "roomDistributed": { "type": "boolean" },
         "resultsUploaded": { "type": "boolean" }
       }
     },
-    "PlayerStats": {
-      "title": "Player Stats",
-      "description": "Global aggregate performance statistics",
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app alerts for players",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
-        "username": { "type": "string" },
-        "totalMatches": { "type": "number" },
-        "totalKills": { "type": "number" },
-        "totalWins": { "type": "number" },
-        "totalScore": { "type": "number" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "LeaderboardEntry": {
-      "title": "Leaderboard Entry",
-      "description": "A single entry in a match-specific leaderboard",
-      "type": "object",
-      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
         "matchId": { "type": "string" },
-        "rank": { "type": "number" },
-        "userId": { "type": "string" },
-        "username": { "type": "string" },
-        "kills": { "type": "number" },
-        "score": { "type": "number" },
-        "position": { "type": "number" },
-        "prizeWon": { "type": "number" },
-        "generatedAt": { "type": "string", "format": "date-time" }
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
       }
     }
   },
@@ -77,15 +61,15 @@
   },
   "firestore": {
     "/users/{userId}": {
-      "schema": "#/entities/UserProfile",
+      "schema": "#/backend/entities/UserProfile",
       "description": "User profile and battle identity"
     },
-    "/playerStats/{userId}": {
-      "schema": "#/entities/PlayerStats",
-      "description": "Global aggregate performance statistics"
+    "/notifications/{notificationId}": {
+      "schema": "#/backend/entities/Notification",
+      "description": "User specific notifications"
     },
     "/tournaments/{tournamentId}": {
-      "schema": "#/entities/Tournament",
+      "schema": "#/backend/entities/Tournament",
       "description": "Main tournament metadata"
     },
     "/tournaments/{tournamentId}/participants/{userId}": {
@@ -104,10 +88,6 @@
         }
       },
       "description": "Participants list with performance data"
-    },
-    "/leaderboards/{matchId}/entries/{userId}": {
-      "schema": "#/entities/LeaderboardEntry",
-      "description": "Match specific leaderboard snapshots"
     }
   }
 }

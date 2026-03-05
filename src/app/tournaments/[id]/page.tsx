@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { 
   Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, 
-  Share2, Info, Loader2, AlertCircle, Gamepad2, Lock, Unlock, Zap, Medal, List, Target, Award
+  Share2, Info, Loader2, AlertCircle, Gamepad2, Lock, Unlock, Zap, Medal, List, Target, Award, Copy, Check
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,6 +27,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
   const db = useFirestore();
   const { user: authUser } = useUser();
   const [isJoining, setIsJoining] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const tournamentRef = doc(db, 'tournaments', resolvedParams.id);
   const { data: tournament, loading: tourneyLoading } = useDoc<any>(tournamentRef);
@@ -63,6 +64,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    toast({ title: "Copied", description: `${field} copied to clipboard.` });
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
   if (tourneyLoading) return (
     <div className="flex h-screen items-center justify-center bg-background">
       <Loader2 className="animate-spin text-primary w-12 h-12" />
@@ -95,7 +103,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         </div>
         <div className="absolute bottom-6 left-6 right-6">
           <div className="flex gap-2 mb-2">
-            <Badge className={cn("text-black border-none font-black uppercase tracking-widest px-2 py-1 rounded-lg text-[9px]", tournament.status === 'open' ? "bg-primary" : "bg-amber-500")}>{tournament.status?.toUpperCase()}</Badge>
+            <Badge className={cn("text-black border-none font-black uppercase tracking-widest px-2 py-1 rounded-lg text-[9px]", tournament.status === 'open' ? "bg-primary" : tournament.status === 'ongoing' ? "bg-emerald-500" : "bg-amber-500")}>{tournament.status?.toUpperCase()}</Badge>
             <Badge variant="outline" className="text-white border-white/20 backdrop-blur-md px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">{tournament.type}</Badge>
           </div>
           <h1 className="text-3xl font-headline font-bold text-white leading-tight tracking-tighter uppercase">{tournament.title}</h1>
@@ -140,27 +148,51 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
           </div>
 
           {isJoined && !isCompleted && (
-            <Card className={cn("rounded-[2.5rem] overflow-hidden border-dashed", isOngoing ? "bg-emerald-500/10 border-emerald-500/30" : "bg-white/5 border-white/10")}>
+            <Card className={cn("rounded-[2.5rem] overflow-hidden border-dashed transition-colors duration-500", isOngoing ? "bg-emerald-500/10 border-emerald-500/40" : "bg-white/5 border-white/10")}>
               <CardContent className="p-8 text-center">
                  {!isOngoing ? (
-                   <div className="space-y-2">
-                      <Lock className="w-8 h-8 text-muted-foreground/50 mx-auto" />
-                      <h4 className="font-headline font-bold uppercase tracking-tight">ROOM SECURED</h4>
-                      <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest">Credentials reveal when match is LIVE</p>
+                   <div className="space-y-3">
+                      <Lock className="w-8 h-8 text-muted-foreground/30 mx-auto" />
+                      <h4 className="font-headline font-bold uppercase tracking-tight text-muted-foreground">ROOM SECURED</h4>
+                      <p className="text-[9px] text-muted-foreground/60 font-black uppercase tracking-widest leading-relaxed max-w-[200px] mx-auto">Credentials will reveal here and via notification when match is LIVE</p>
                    </div>
                  ) : (
-                   <div className="space-y-6">
-                      <Unlock className="w-8 h-8 text-emerald-500 mx-auto animate-pulse" />
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-black/40 p-4 rounded-2xl border border-white/5">
-                          <p className="text-[8px] text-muted-foreground font-black uppercase mb-1">Room ID</p>
-                          <p className="font-headline text-lg font-bold text-white tracking-widest">{tournament.roomId || 'WAIT'}</p>
+                   <div className="space-y-6 animate-in-fade">
+                      <div className="flex flex-col items-center gap-2">
+                        <Unlock className="w-10 h-10 text-emerald-500 animate-pulse" />
+                        <h4 className="font-headline font-bold uppercase tracking-tight text-emerald-500">BATTLE READY</h4>
+                      </div>
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex items-center justify-between group">
+                          <div className="text-left">
+                            <p className="text-[8px] text-muted-foreground font-black uppercase mb-1 tracking-widest">Room ID</p>
+                            <p className="font-headline text-2xl font-bold text-white tracking-widest">{tournament.roomId || 'PENDING'}</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => copyToClipboard(tournament.roomId, 'Room ID')}
+                            className="bg-white/5 rounded-xl hover:bg-white/10"
+                          >
+                            {copiedField === 'Room ID' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                          </Button>
                         </div>
-                        <div className="bg-black/40 p-4 rounded-2xl border border-white/5">
-                          <p className="text-[8px] text-muted-foreground font-black uppercase mb-1">Password</p>
-                          <p className="font-headline text-lg font-bold text-white tracking-widest">{tournament.roomPassword || 'WAIT'}</p>
+                        <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex items-center justify-between group">
+                          <div className="text-left">
+                            <p className="text-[8px] text-muted-foreground font-black uppercase mb-1 tracking-widest">Password</p>
+                            <p className="font-headline text-2xl font-bold text-white tracking-widest">{tournament.roomPassword || 'PENDING'}</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => copyToClipboard(tournament.roomPassword, 'Password')}
+                            className="bg-white/5 rounded-xl hover:bg-white/10"
+                          >
+                            {copiedField === 'Password' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                          </Button>
                         </div>
                       </div>
+                      <p className="text-[9px] text-emerald-500/80 font-bold uppercase tracking-widest italic">Join the lobby immediately! Good luck, Warrior.</p>
                    </div>
                  )}
               </CardContent>

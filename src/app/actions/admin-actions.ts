@@ -2,7 +2,7 @@
 "use server"
 
 import { initializeFirebase } from '@/firebase';
-import { doc, runTransaction, serverTimestamp, collection, getDocs, setDoc, getDoc } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, collection, getDocs, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 
 /**
  * Scoring helper based on official rules.
@@ -32,6 +32,7 @@ export async function createTournamentAction(adminId: string, tournamentData: an
       joinedCount: 0,
       status: 'open',
       resultsUploaded: false,
+      roomDistributed: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       startTime: new Date(tournamentData.startTime).toISOString(),
@@ -57,8 +58,64 @@ export async function createTournamentAction(adminId: string, tournamentData: an
 }
 
 /**
+ * Distributes Room ID and Password to all participants and notifies them.
+ */
+export async function distributeRoomDetailsAction(tournamentId: string, adminId: string, roomId: string, roomPassword: string) {
+  const { db } = initializeFirebase();
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const tourneyRef = doc(db, 'tournaments', tournamentId);
+      const tourneySnap = await transaction.get(tourneyRef);
+
+      if (!tourneySnap.exists()) throw new Error("Tournament not found");
+      const tourneyData = tourneySnap.data();
+
+      // 1. Update Tournament credentials
+      transaction.update(tourneyRef, {
+        roomId,
+        roomPassword,
+        status: 'ongoing',
+        roomDistributed: true,
+        updatedAt: serverTimestamp()
+      });
+
+      // 2. Fetch all participants to send "push" (in-app notifications)
+      const participantsRef = collection(db, 'tournaments', tournamentId, 'participants');
+      const participantsSnap = await getDocs(participantsRef);
+
+      participantsSnap.forEach((pDoc) => {
+        const notifRef = doc(collection(db, 'notifications'));
+        transaction.set(notifRef, {
+          userId: pDoc.id,
+          title: "Match Room Details",
+          message: `Your match "${tourneyData.title}" is starting! Room ID: ${roomId}, Password: ${roomPassword}. Enter now to secure your spot.`,
+          matchId: tournamentId,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      });
+
+      // 3. Audit Log
+      const auditRef = doc(collection(db, 'audit_logs'));
+      transaction.set(auditRef, {
+        adminId: adminId,
+        action: 'DISTRIBUTE_ROOM_DETAILS',
+        targetId: tournamentId,
+        details: `Distributed Room ID ${roomId} to ${participantsSnap.size} warriors.`,
+        timestamp: serverTimestamp()
+      });
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('[ADMIN ERROR] Distribute Room Failed:', error);
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Distributes prizes and updates leaderboards/global stats.
- * Results: { userId: string, kills: number, placement: number, prize: number }[]
  */
 export async function distributePrizesAction(tournamentId: string, adminId: string, results: { userId: string, kills: number, placement: number, prize: number }[]) {
   const { db } = initializeFirebase();
