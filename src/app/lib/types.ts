@@ -35,6 +35,17 @@ export interface Transaction {
   referenceId?: string;
 }
 
+export interface PaymentOrder {
+  id: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  razorpayOrderId: string;
+  razorpayPaymentId?: string;
+  status: 'created' | 'paid' | 'failed';
+  createdAt: string;
+}
+
 export interface Participant {
   userId: string;
   username: string;

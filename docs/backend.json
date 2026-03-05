@@ -38,12 +38,14 @@
       "description": "Financial records for deposits and fees",
       "type": "object",
       "properties": {
+        "userId": { "type": "string" },
         "amount": { "type": "number" },
         "type": { "type": "string", "enum": ["deposit", "withdrawal", "entry_fee", "prize"] },
         "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
         "referenceId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
-      }
+      },
+      "required": ["userId", "amount", "type", "status", "createdAt"]
     },
     "PaymentOrder": {
       "title": "Payment Order",
@@ -53,11 +55,12 @@
         "userId": { "type": "string" },
         "amount": { "type": "number" },
         "currency": { "type": "string" },
-        "razorpayOrderId": { "type": "string" },
+        "razorpayOrderId": { "type": "string", "description": "The unique order ID from Razorpay" },
+        "razorpayPaymentId": { "type": "string", "description": "The unique payment ID from Razorpay (set after success)" },
         "status": { "type": "string", "enum": ["created", "paid", "failed"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "amount", "razorpayOrderId", "status"]
+      "required": ["userId", "amount", "razorpayOrderId", "status", "createdAt"]
     },
     "AuditLog": {
       "title": "Audit Log",
