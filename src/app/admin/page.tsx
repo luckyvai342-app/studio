@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Trophy, Users, Wallet, ShieldAlert, History, 
   Settings, Loader2, CheckCircle, XCircle, AlertTriangle, 
   Search, Plus, Eye, DollarSign, Ban, RefreshCw, Save, Upload, Zap,
-  Menu, X, ChevronRight, BarChart3, MessageSquare, Camera, Filter, ArrowUpRight
+  Menu, X, ChevronRight, BarChart3, MessageSquare, Camera, Filter, ArrowUpRight, Trash2, Edit3, Calendar
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { 
   collectionGroup, query, where, doc, updateDoc, 
-  serverTimestamp, orderBy, collection, limit, getDocs 
+  serverTimestamp, orderBy, collection, limit, getDocs, deleteDoc 
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { approveWithdrawalAction } from '@/app/actions';
@@ -28,12 +28,14 @@ import {
   createTournamentAction, 
   distributeRoomDetailsAction,
   adjustUserWalletAction,
-  toggleUserStatusAction
+  toggleUserStatusAction,
+  cancelTournamentAction
 } from '@/app/actions/admin-actions';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from '@/components/ui/progress';
 
-type AdminSection = 'dashboard' | 'users' | 'tournaments' | 'wallet' | 'withdrawals' | 'rooms' | 'leaderboard' | 'reports' | 'settings';
+type AdminSection = 'dashboard' | 'users' | 'tournaments' | 'wallet' | 'withdrawals' | 'rooms' | 'reports' | 'settings';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -53,6 +55,18 @@ export default function AdminDashboard() {
 
   // Modals States
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newTourney, setNewTourney] = useState({
+    title: '',
+    description: '',
+    entryFee: 50,
+    totalPrize: 1000,
+    maxPlayers: 48,
+    map: 'Bermuda',
+    type: 'Solo',
+    startTime: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
+    imageUrl: 'https://picsum.photos/seed/ffmatch/800/400'
+  });
+
   const [activeUserAdjust, setActiveUserAdjust] = useState<any>(null);
   const [adjAmount, setAdjAmount] = useState('0');
   const [roomDistTourney, setRoomDistTourney] = useState<any>(null);
@@ -80,6 +94,48 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  const handleCreateTournament = async () => {
+    if (!authUser) return;
+    setIsProcessing('creating');
+    try {
+      await createTournamentAction(authUser.uid, newTourney);
+      toast({ title: "Tournament Deployed", description: "Warriors can now join the arena." });
+      setIsCreateDialogOpen(false);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Failed", description: e.message });
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
+  const handleCancelTournament = async (id: string) => {
+    if (!authUser) return;
+    if (!confirm("Are you sure? This will refund all players immediately.")) return;
+    setIsProcessing(id);
+    try {
+      await cancelTournamentAction(id, authUser.uid);
+      toast({ title: "Tournament Cancelled", description: "All entry fees have been refunded." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Refund Failed", description: e.message });
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
+  const handleDeleteTournament = async (id: string, joinedCount: number) => {
+    if (joinedCount > 0) {
+      toast({ variant: "destructive", title: "Cannot Delete", description: "Tournament has joined players. Use Cancel instead." });
+      return;
+    }
+    if (!confirm("Delete this tournament forever?")) return;
+    try {
+      await deleteDoc(doc(db, 'tournaments', id));
+      toast({ title: "Deleted", description: "Tournament removed from the system." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Failed", description: e.message });
+    }
+  };
 
   const handleAdjustWallet = async () => {
     if (!activeUserAdjust || !authUser) return;
@@ -125,7 +181,7 @@ export default function AdminDashboard() {
   const menuItems = [
     { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard },
     { id: 'users', label: 'Warriors', icon: Users },
-    { id: 'tournaments', label: 'Tournaments', icon: Trophy },
+    { id: 'tournaments', label: 'Battles', icon: Trophy },
     { id: 'withdrawals', label: 'Payout Requests', icon: DollarSign, badge: withdrawals?.length },
     { id: 'rooms', label: 'Room Dispatch', icon: Zap },
     { id: 'reports', label: 'Audit Logs', icon: ShieldAlert },
@@ -275,6 +331,134 @@ export default function AdminDashboard() {
                          ))}
                       </CardContent>
                    </Card>
+                </div>
+             </div>
+           )}
+
+           {/* Section: Tournaments */}
+           {activeSection === 'tournaments' && (
+             <div className="space-y-8 animate-in-fade">
+                <div className="flex flex-col md:flex-row justify-between items-center bg-[#111] p-8 rounded-[3rem] border border-white/5 gap-6">
+                   <div className="relative flex-1 w-full">
+                      <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search battles by name..." 
+                        className="bg-white/5 border-white/5 pl-14 h-16 rounded-2xl text-sm font-medium focus:border-primary/50" 
+                        value={tourneySearch}
+                        onChange={e => setTourneySearch(e.target.value)}
+                      />
+                   </div>
+                   <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="bg-primary text-black font-black rounded-2xl h-16 px-10 flex gap-3 shadow-lg shadow-primary/20">
+                          <Plus className="w-5 h-5" /> NEW BATTLE
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-[#1A1A1A] border-white/5 rounded-[3rem] max-w-2xl p-10">
+                        <DialogHeader>
+                          <DialogTitle className="text-2xl font-headline font-bold">Deploy New Tournament</DialogTitle>
+                          <DialogDescription className="text-xs pt-2">Set arena parameters for the next clash.</DialogDescription>
+                        </DialogHeader>
+                        <div className="grid grid-cols-2 gap-6 py-6">
+                           <div className="space-y-2">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Battle Title</Label>
+                              <Input value={newTourney.title} onChange={e => setNewTourney({...newTourney, title: e.target.value})} placeholder="e.g. Sunday Pro Cup" className="bg-background/50 border-white/10 h-12 rounded-xl" />
+                           </div>
+                           <div className="space-y-2">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Map</Label>
+                              <Select onValueChange={v => setNewTourney({...newTourney, map: v})} defaultValue={newTourney.map}>
+                                <SelectTrigger className="h-12 bg-background/50 border-white/10 rounded-xl"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#1A1A1A] border-white/10">
+                                  {['Bermuda', 'Purgatory', 'Kalahari', 'Alpine'].map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                           </div>
+                           <div className="space-y-2">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Entry Fee (₹)</Label>
+                              <Input type="number" value={newTourney.entryFee} onChange={e => setNewTourney({...newTourney, entryFee: parseInt(e.target.value)})} className="bg-background/50 border-white/10 h-12 rounded-xl" />
+                           </div>
+                           <div className="space-y-2">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Total Prize (₹)</Label>
+                              <Input type="number" value={newTourney.totalPrize} onChange={e => setNewTourney({...newTourney, totalPrize: parseInt(e.target.value)})} className="bg-background/50 border-white/10 h-12 rounded-xl" />
+                           </div>
+                           <div className="space-y-2">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Start Time</Label>
+                              <Input type="datetime-local" value={newTourney.startTime} onChange={e => setNewTourney({...newTourney, startTime: e.target.value})} className="bg-background/50 border-white/10 h-12 rounded-xl" />
+                           </div>
+                           <div className="space-y-2">
+                              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Type</Label>
+                              <Select onValueChange={v => setNewTourney({...newTourney, type: v as any})} defaultValue={newTourney.type}>
+                                <SelectTrigger className="h-12 bg-background/50 border-white/10 rounded-xl"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#1A1A1A] border-white/10">
+                                  {['Solo', 'Duo', 'Squad'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                           </div>
+                        </div>
+                        <DialogFooter>
+                          <Button className="w-full h-14 bg-primary text-black font-black rounded-2xl shadow-lg shadow-primary/20" onClick={handleCreateTournament} disabled={isProcessing === 'creating'}>
+                            {isProcessing === 'creating' ? <Loader2 className="animate-spin" /> : 'CONFIRM DEPLOYMENT'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                   </Dialog>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   {tournaments?.filter((t:any) => t.title.toLowerCase().includes(tourneySearch.toLowerCase())).map((t: any) => (
+                     <Card key={t.id} className="bg-[#111] border-white/5 rounded-[3rem] overflow-hidden group hover:border-primary/20 transition-all">
+                        <CardContent className="p-10">
+                           <div className="flex justify-between items-start mb-8">
+                              <div>
+                                 <h3 className="font-bold text-xl tracking-tight">{t.title}</h3>
+                                 <div className="flex items-center gap-3 mt-2">
+                                   <Badge variant="outline" className="text-[8px] uppercase tracking-widest border-white/10 text-muted-foreground font-black px-2">{t.status}</Badge>
+                                   <span className="text-[9px] text-muted-foreground font-bold flex items-center gap-1"><Calendar className="w-3 h-3" /> {new Date(t.startTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                                 </div>
+                              </div>
+                              <div className="text-right">
+                                 <p className="text-2xl font-headline font-bold text-primary">₹{t.totalPrize.toLocaleString()}</p>
+                                 <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest mt-1">PRIZE POOL</p>
+                              </div>
+                           </div>
+
+                           <div className="grid grid-cols-2 gap-6 mb-8 bg-white/5 p-6 rounded-3xl border border-white/5">
+                              <div className="space-y-1">
+                                 <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest">Enrollment</p>
+                                 <p className="font-bold text-sm">{t.joinedCount} / {t.maxPlayers} Warriors</p>
+                                 <Progress value={(t.joinedCount / t.maxPlayers) * 100} className="h-1.5 bg-white/10 mt-2" />
+                              </div>
+                              <div className="space-y-1">
+                                 <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest">Entry Fee</p>
+                                 <p className="font-bold text-sm">₹{t.entryFee} / Seat</p>
+                                 <div className="h-1.5 w-full bg-white/5 rounded-full mt-2" />
+                              </div>
+                           </div>
+
+                           <div className="grid grid-cols-2 gap-4">
+                              <Button 
+                                variant="outline" 
+                                className="rounded-2xl h-14 font-black text-[10px] uppercase border-white/10 bg-white/5 hover:bg-white/10"
+                                onClick={() => setActiveSection('rooms')}
+                              >
+                                <Zap className="w-4 h-4 mr-2 text-primary" /> DISPATCH
+                              </Button>
+                              <div className="grid grid-cols-2 gap-2">
+                                 <Button variant="ghost" size="icon" className="h-14 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10"><Edit3 className="w-5 h-5" /></Button>
+                                 <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20"
+                                  onClick={() => handleCancelTournament(t.id)}
+                                  disabled={isProcessing === t.id}
+                                 >
+                                    {isProcessing === t.id ? <Loader2 className="animate-spin w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                                 </Button>
+                              </div>
+                           </div>
+                        </CardContent>
+                     </Card>
+                   ))}
                 </div>
              </div>
            )}

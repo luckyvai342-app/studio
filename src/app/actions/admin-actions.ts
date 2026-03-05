@@ -2,7 +2,7 @@
 "use server"
 
 import { initializeFirebase } from '@/firebase';
-import { doc, runTransaction, serverTimestamp, collection, getDocs, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, collection, getDocs, setDoc, getDoc, updateDoc, query, where } from 'firebase/firestore';
 
 /**
  * Scoring helper based on official rules.
@@ -230,6 +230,75 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
     return { success: true };
   } catch (error: any) {
     console.error('[PRIZE ERROR]', error);
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Cancels a tournament and auto-refunds all joined participants.
+ */
+export async function cancelTournamentAction(tournamentId: string, adminId: string) {
+  const { db } = initializeFirebase();
+  
+  try {
+    await runTransaction(db, async (transaction) => {
+      const tourneyRef = doc(db, 'tournaments', tournamentId);
+      const tourneySnap = await transaction.get(tourneyRef);
+      
+      if (!tourneySnap.exists()) throw new Error("Tournament not found");
+      const tourneyData = tourneySnap.data();
+      
+      if (tourneyData.status === 'completed' || tourneyData.status === 'cancelled') {
+        throw new Error(`Tournament is already ${tourneyData.status}`);
+      }
+
+      const participantsRef = collection(db, 'tournaments', tournamentId, 'participants');
+      const participantsSnap = await getDocs(participantsRef);
+
+      // Refund each participant
+      for (const pDoc of participantsSnap.docs) {
+        const userId = pDoc.id;
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await transaction.get(userRef);
+        
+        if (userSnap.exists()) {
+          const currentBalance = userSnap.data().walletBalance || 0;
+          transaction.update(userRef, {
+            walletBalance: currentBalance + tourneyData.entryFee,
+            lastActionAt: serverTimestamp()
+          });
+
+          const txRef = doc(collection(db, 'users', userId, 'transactions'));
+          transaction.set(txRef, {
+            amount: tourneyData.entryFee,
+            type: 'refund',
+            status: 'completed',
+            referenceId: tournamentId,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+
+      // Update Tournament Status
+      transaction.update(tourneyRef, {
+        status: 'cancelled',
+        updatedAt: serverTimestamp()
+      });
+
+      // Audit Log
+      const auditRef = doc(collection(db, 'audit_logs'));
+      transaction.set(auditRef, {
+        adminId: adminId,
+        action: 'CANCEL_TOURNAMENT',
+        targetId: tournamentId,
+        details: `Cancelled tournament and refunded ${participantsSnap.size} participants.`,
+        timestamp: serverTimestamp()
+      });
+    });
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('[CANCEL ERROR]', error);
     throw new Error(error.message);
   }
 }
