@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { 
   Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, 
-  Share2, Info, Loader2, AlertCircle, Gamepad2, Lock, Unlock, Zap, Medal, List 
+  Share2, Info, Loader2, AlertCircle, Gamepad2, Lock, Unlock, Zap, Medal, List, Target, Award
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,7 +34,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
   const userProfileRef = authUser ? doc(db, 'users', authUser.uid) : null;
   const { data: userProfile } = useDoc<any>(userProfileRef);
 
-  // Participants & Leaderboard queries
   const participantsQuery = useMemo(() => {
     return query(collection(db, 'tournaments', resolvedParams.id, 'participants'), orderBy('joinedAt', 'asc'));
   }, [db, resolvedParams.id]);
@@ -107,7 +106,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         <TabsList className="bg-white/5 border-white/5 w-full justify-start p-1 rounded-2xl mb-8">
            <TabsTrigger value="info" className="flex-1 rounded-xl font-bold gap-2"><Info className="w-3 h-3"/> INFO</TabsTrigger>
            <TabsTrigger value="players" className="flex-1 rounded-xl font-bold gap-2"><Users className="w-3 h-3"/> PLAYERS</TabsTrigger>
-           <TabsTrigger value="leaderboard" className="flex-1 rounded-xl font-bold gap-2"><Trophy className="w-3 h-3"/> RESULTS</TabsTrigger>
+           <TabsTrigger value="leaderboard" className="flex-1 rounded-xl font-bold gap-2"><Award className="w-3 h-3"/> RESULTS</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-8 animate-in-fade">
@@ -191,12 +190,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
              <CardContent className="p-0">
                 <div className="divide-y divide-white/5">
                    {participants?.map((p: any, idx: number) => (
-                     <div key={idx} className="p-4 flex items-center justify-between">
+                     <div key={idx} className="p-4 flex items-center justify-between hover:bg-white/[0.02]">
                         <div className="flex items-center gap-3">
                            <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-bold text-muted-foreground">{idx + 1}</div>
-                           <span className="font-bold text-sm">{p.username}</span>
+                           <span className="font-bold text-sm tracking-tight">{p.username}</span>
                         </div>
-                        <Badge variant="outline" className="text-[8px] font-black uppercase border-white/10">{p.gameUid?.substring(0, 5)}...</Badge>
+                        <Badge variant="outline" className="text-[8px] font-black uppercase border-white/10 tracking-widest text-muted-foreground">ID: {p.gameUid?.substring(0, 5)}</Badge>
                      </div>
                    ))}
                 </div>
@@ -207,27 +206,43 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         <TabsContent value="leaderboard" className="animate-in-fade">
            {isCompleted ? (
              <div className="space-y-4">
+                <div className="px-2 flex justify-between items-center mb-2">
+                  <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Final Ranking</h4>
+                  <Badge className="bg-primary/20 text-primary border-none text-[8px] font-black uppercase">Official Results</Badge>
+                </div>
                 {leaderboardEntries?.map((entry: any) => (
-                  <Card key={entry.userId} className={cn("bg-white/5 border-white/5 rounded-2xl overflow-hidden", entry.rank <= 3 && "border-primary/20 bg-primary/5")}>
+                  <Card key={entry.userId} className={cn(
+                    "bg-[#1A1A1A]/60 border-white/5 rounded-2xl overflow-hidden transition-all duration-300",
+                    entry.rank === 1 && "border-primary/40 bg-primary/5 shadow-[0_0_20px_rgba(0,255,136,0.1)]"
+                  )}>
                     <CardContent className="p-4 flex items-center justify-between">
                        <div className="flex items-center gap-4">
-                          <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-headline font-bold text-lg", 
-                            entry.rank === 1 ? "bg-primary text-black" : "bg-white/10 text-white")}>
-                            {entry.rank}
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center font-headline font-bold text-lg border",
+                            entry.rank === 1 ? "bg-primary text-black border-primary" : 
+                            entry.rank === 2 ? "bg-slate-400/10 text-slate-400 border-slate-400/20" :
+                            entry.rank === 3 ? "bg-orange-700/10 text-orange-700 border-orange-700/20" :
+                            "bg-white/5 text-muted-foreground border-white/5"
+                          )}>
+                            {entry.rank === 1 ? <Medal className="w-5 h-5" /> : entry.rank}
                           </div>
                           <div>
-                             <p className="font-bold text-sm flex items-center gap-2">
+                             <p className="font-bold text-sm tracking-tight flex items-center gap-2">
                                {entry.username} 
-                               {entry.rank === 1 && <Medal className="w-3 h-3 text-primary" />}
                              </p>
-                             <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">
-                               Kills: {entry.kills} • Pts: {entry.score}
-                             </p>
+                             <div className="flex items-center gap-3 mt-0.5">
+                               <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest flex items-center gap-1">
+                                 <Target className="w-2.5 h-2.5 text-rose-500" /> {entry.kills} Kills
+                               </span>
+                               <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest flex items-center gap-1">
+                                 <Zap className="w-2.5 h-2.5 text-primary" /> {entry.score} Score
+                               </span>
+                             </div>
                           </div>
                        </div>
                        <div className="text-right">
-                          <p className="text-primary font-bold text-lg">₹{entry.prizeWon}</p>
-                          <p className="text-[8px] text-muted-foreground font-bold uppercase">PAID</p>
+                          <p className="text-primary font-headline font-bold text-lg">₹{entry.prizeWon}</p>
+                          <p className="text-[8px] text-muted-foreground font-black uppercase tracking-tighter">SECURED</p>
                        </div>
                     </CardContent>
                   </Card>

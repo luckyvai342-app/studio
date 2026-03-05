@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { label: 'Home', icon: Home, href: '/' },
-  { label: 'Tournaments', icon: Trophy, href: '/tournaments' },
+  { label: 'Battles', icon: Trophy, href: '/tournaments' },
+  { label: 'Ranks', icon: Award, href: '/leaderboards' },
   { label: 'Wallet', icon: Wallet, href: '/wallet' },
   { label: 'Profile', icon: User, href: '/profile' },
 ];
@@ -26,7 +27,7 @@ export function Navbar() {
               key={item.label}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center space-y-1 transition-all duration-200 w-full",
+                "flex flex-col items-center justify-center space-y-1 transition-all duration-200 w-full relative",
                 isActive ? "text-primary scale-110" : "text-muted-foreground hover:text-foreground"
               )}
             >
