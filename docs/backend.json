@@ -41,19 +41,35 @@
         "resultsUploaded": { "type": "boolean" }
       }
     },
-    "Transaction": {
-      "title": "Transaction",
-      "description": "Financial records for deposits and fees",
+    "PlayerStats": {
+      "title": "Player Stats",
+      "description": "Global aggregate performance statistics",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
-        "amount": { "type": "number" },
-        "type": { "type": "string", "enum": ["deposit", "withdrawal", "entry_fee", "prize", "refund"] },
-        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
-        "referenceId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["userId", "amount", "type", "status", "createdAt"]
+        "username": { "type": "string" },
+        "totalMatches": { "type": "number" },
+        "totalKills": { "type": "number" },
+        "totalWins": { "type": "number" },
+        "totalScore": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "LeaderboardEntry": {
+      "title": "Leaderboard Entry",
+      "description": "A single entry in a match-specific leaderboard",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string" },
+        "rank": { "type": "number" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "kills": { "type": "number" },
+        "score": { "type": "number" },
+        "position": { "type": "number" },
+        "prizeWon": { "type": "number" },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -63,6 +79,10 @@
     "/users/{userId}": {
       "schema": "#/entities/UserProfile",
       "description": "User profile and battle identity"
+    },
+    "/playerStats/{userId}": {
+      "schema": "#/entities/PlayerStats",
+      "description": "Global aggregate performance statistics"
     },
     "/tournaments/{tournamentId}": {
       "schema": "#/entities/Tournament",
@@ -78,10 +98,16 @@
           "gameUsername": { "type": "string" },
           "kills": { "type": "number" },
           "placement": { "type": "number" },
+          "score": { "type": "number" },
+          "prizeWon": { "type": "number" },
           "joinedAt": { "type": "string", "format": "date-time" }
         }
       },
-      "description": "Participants list with game identity"
+      "description": "Participants list with performance data"
+    },
+    "/leaderboards/{matchId}/entries/{userId}": {
+      "schema": "#/entities/LeaderboardEntry",
+      "description": "Match specific leaderboard snapshots"
     }
   }
 }

@@ -2,7 +2,21 @@
 "use server"
 
 import { initializeFirebase } from '@/firebase';
-import { doc, runTransaction, serverTimestamp, collection, getDocs, setDoc } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, collection, getDocs, setDoc, getDoc } from 'firebase/firestore';
+
+/**
+ * Scoring helper based on official rules.
+ */
+function getPositionBonus(pos: number): number {
+  if (pos === 1) return 12;
+  if (pos === 2) return 9;
+  if (pos === 3) return 7;
+  if (pos === 4) return 5;
+  if (pos === 5) return 4;
+  if (pos >= 6 && pos <= 10) return 2;
+  if (pos >= 11 && pos <= 20) return 1;
+  return 0;
+}
 
 /**
  * Creates a new tournament record.
@@ -43,9 +57,10 @@ export async function createTournamentAction(adminId: string, tournamentData: an
 }
 
 /**
- * Distributes prizes for a tournament based on ranking and kills.
+ * Distributes prizes and updates leaderboards/global stats.
+ * Results: { userId: string, kills: number, placement: number, prize: number }[]
  */
-export async function distributePrizesAction(tournamentId: string, adminId: string, results: { userId: string, prize: number }[]) {
+export async function distributePrizesAction(tournamentId: string, adminId: string, results: { userId: string, kills: number, placement: number, prize: number }[]) {
   const { db } = initializeFirebase();
   
   try {
@@ -56,49 +71,108 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
       if (!tourneySnap.exists()) throw new Error("Tournament not found");
       if (tourneySnap.data().resultsUploaded) throw new Error("Prizes already distributed for this tournament");
 
-      for (const res of results) {
-        if (res.prize <= 0) continue;
+      // Sort results by score to generate rank snapshot
+      const calculatedResults = results.map(r => ({
+        ...r,
+        score: (r.kills * 2) + getPositionBonus(r.placement)
+      })).sort((a, b) => b.score - a.score || a.placement - b.placement);
 
+      for (let i = 0; i < calculatedResults.length; i++) {
+        const res = calculatedResults[i];
+        const rank = i + 1;
+
+        // 1. Update Participant Record
+        const participantRef = doc(db, 'tournaments', tournamentId, 'participants', res.userId);
+        transaction.update(participantRef, {
+          kills: res.kills,
+          placement: res.placement,
+          score: res.score,
+          prizeWon: res.prize
+        });
+
+        // 2. Update User Wallet (if prize won)
         const userRef = doc(db, 'users', res.userId);
         const userSnap = await transaction.get(userRef);
         
         if (userSnap.exists()) {
-          const currentBalance = userSnap.data().walletBalance || 0;
-          
-          transaction.update(userRef, {
-            walletBalance: currentBalance + res.prize,
-            lastActionAt: serverTimestamp()
-          });
+          const userData = userSnap.data();
+          if (res.prize > 0) {
+            transaction.update(userRef, {
+              walletBalance: (userData.walletBalance || 0) + res.prize,
+              lastActionAt: serverTimestamp()
+            });
 
-          const txRef = doc(collection(db, 'users', res.userId, 'transactions'));
-          transaction.set(txRef, {
-            amount: res.prize,
-            type: 'prize',
-            status: 'completed',
-            referenceId: tournamentId,
-            createdAt: new Date().toISOString()
-          });
+            const txRef = doc(collection(db, 'users', res.userId, 'transactions'));
+            transaction.set(txRef, {
+              amount: res.prize,
+              type: 'prize',
+              status: 'completed',
+              referenceId: tournamentId,
+              createdAt: new Date().toISOString()
+            });
+          }
+
+          // 3. Update Global Player Stats
+          const statsRef = doc(db, 'playerStats', res.userId);
+          const statsSnap = await transaction.get(statsRef);
+          if (statsSnap.exists()) {
+            const stats = statsSnap.data();
+            transaction.update(statsRef, {
+              totalMatches: stats.totalMatches + 1,
+              totalKills: stats.totalKills + res.kills,
+              totalWins: stats.totalWins + (res.placement === 1 ? 1 : 0),
+              totalScore: stats.totalScore + res.score,
+              updatedAt: new Date().toISOString()
+            });
+          } else {
+            transaction.set(statsRef, {
+              userId: res.userId,
+              username: userData.username,
+              totalMatches: 1,
+              totalKills: res.kills,
+              totalWins: res.placement === 1 ? 1 : 0,
+              totalScore: res.score,
+              updatedAt: new Date().toISOString()
+            });
+          }
         }
+
+        // 4. Create Leaderboard Snapshot
+        const lbRef = doc(db, 'leaderboards', tournamentId, 'entries', res.userId);
+        transaction.set(lbRef, {
+          matchId: tournamentId,
+          rank,
+          userId: res.userId,
+          username: (userSnap.exists() ? userSnap.data().username : 'Warrior'),
+          kills: res.kills,
+          score: res.score,
+          position: res.placement,
+          prizeWon: res.prize,
+          generatedAt: new Date().toISOString()
+        });
       }
 
+      // 5. Finalize Tournament
       transaction.update(tourneyRef, {
         status: 'completed',
         resultsUploaded: true,
         updatedAt: serverTimestamp()
       });
 
+      // Audit Log
       const auditRef = doc(collection(db, 'audit_logs'));
       transaction.set(auditRef, {
         adminId: adminId,
         action: 'PRIZE_DISTRIBUTION',
         targetId: tournamentId,
-        details: `Distributed prizes to ${results.length} players.`,
+        details: `Finalized results and prizes for ${results.length} players.`,
         timestamp: serverTimestamp()
       });
     });
 
     return { success: true };
   } catch (error: any) {
+    console.error('[PRIZE ERROR]', error);
     throw new Error(error.message);
   }
 }

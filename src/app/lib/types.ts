@@ -50,8 +50,30 @@ export interface Participant {
   gameUid: string;
   gameUsername: string;
   kills: number;
-  damage?: number;
   placement: number;
+  score: number;
   prizeWon?: number;
   joinedAt: string;
+}
+
+export interface PlayerStats {
+  userId: string;
+  username: string;
+  totalMatches: number;
+  totalKills: number;
+  totalWins: number;
+  totalScore: number;
+  updatedAt: string;
+}
+
+export interface LeaderboardEntry {
+  matchId: string;
+  rank: number;
+  userId: string;
+  username: string;
+  kills: number;
+  score: number;
+  position: number;
+  prizeWon: number;
+  generatedAt: string;
 }

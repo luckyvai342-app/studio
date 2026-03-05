@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { 
   LayoutDashboard, Trophy, Users, Wallet, ShieldAlert, History, 
   Settings, Loader2, CheckCircle, XCircle, AlertTriangle, 
-  Search, Plus, Eye, DollarSign, Ban, RefreshCw, Save
+  Search, Plus, Eye, DollarSign, Ban, RefreshCw, Save, Upload
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useFirestore, useCollection, useUser } from '@/firebase';
 import { 
   collectionGroup, query, where, doc, updateDoc, 
-  serverTimestamp, orderBy, collection, limit 
+  serverTimestamp, orderBy, collection, limit, getDocs 
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { approveWithdrawalAction } from '@/app/actions';
@@ -31,18 +31,22 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  
+  // Results Entry State
+  const [activeResultsTourney, setActiveResultsTourney] = useState<any>(null);
+  const [playerResults, setPlayerResults] = useState<any[]>([]);
 
   // New Tournament Form State
   const [newTournament, setNewTournament] = useState({
     title: '',
     description: '',
     entryFee: 50,
-    totalPrize: 1000,
+    totalPrize: 1960,
     maxPlayers: 48,
     map: 'Bermuda',
     type: 'Solo',
     startTime: new Date().toISOString().slice(0, 16),
-    imageUrl: 'https://picsum.photos/seed/tourney/400/250'
+    imageUrl: 'https://images.augustman.com/wp-content/uploads/sites/6/2023/09/05201105/FF-4.jpg'
   });
 
   // Queries
@@ -81,28 +85,36 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleApproveWithdrawal = async (tx: any) => {
-    setIsProcessing(tx.id);
+  const loadParticipantsForResults = async (tourney: any) => {
+    setIsProcessing(tourney.id);
     try {
-      const result = await approveWithdrawalAction(tx.id, tx.userId, tx.amount);
-      if (result.success) {
-        toast({ title: "Approved", description: `₹${tx.amount} deducted from wallet.` });
-      }
+      const pRef = collection(db, 'tournaments', tourney.id, 'participants');
+      const snap = await getDocs(pRef);
+      const list = snap.docs.map(d => ({
+        userId: d.id,
+        username: d.data().username,
+        kills: 0,
+        placement: 0,
+        prize: 0
+      }));
+      setPlayerResults(list);
+      setActiveResultsTourney(tourney);
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message });
+      toast({ variant: "destructive", title: "Error loading players", description: e.message });
     } finally {
       setIsProcessing(null);
     }
   };
 
-  const handleDistributePrizes = async (tourneyId: string) => {
-    setIsProcessing(tourneyId);
+  const handleSaveResults = async () => {
+    if (!activeResultsTourney || !authUser) return;
+    setIsProcessing('submitting-results');
     try {
-      const mockResults = [{ userId: 'system', prize: 0 }]; // Logic placeholder
-      await distributePrizesAction(tourneyId, authUser?.uid || 'system', mockResults);
-      toast({ title: "Prizes Distributed", description: "Warriors have been paid." });
+      await distributePrizesAction(activeResultsTourney.id, authUser.uid, playerResults);
+      toast({ title: "Results Finalized", description: "Warriors have been ranked and paid." });
+      setActiveResultsTourney(null);
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Error", description: e.message });
+      toast({ variant: "destructive", title: "Error submitting results", description: e.message });
     } finally {
       setIsProcessing(null);
     }
@@ -235,6 +247,16 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {!t.resultsUploaded && t.status !== 'cancelled' && (
+                        <Button 
+                          size="sm" 
+                          className="bg-primary text-black rounded-xl h-10 font-bold"
+                          onClick={() => loadParticipantsForResults(t)}
+                          disabled={isProcessing === t.id}
+                        >
+                          {isProcessing === t.id ? <Loader2 className="animate-spin w-4 h-4" /> : 'Enter Results'}
+                        </Button>
+                      )}
                       {t.status === 'open' && (
                         <Button 
                           size="sm" 
@@ -242,17 +264,7 @@ export default function AdminDashboard() {
                           className="rounded-xl h-10 font-bold"
                           onClick={() => refundTournamentAction(t.id, authUser?.uid || 'admin')}
                         >
-                          Cancel & Refund
-                        </Button>
-                      )}
-                      {t.status === 'ongoing' && (
-                        <Button 
-                          size="sm" 
-                          className="bg-primary text-black rounded-xl h-10 font-bold"
-                          onClick={() => handleDistributePrizes(t.id)}
-                          disabled={isProcessing === t.id}
-                        >
-                          {isProcessing === t.id ? <Loader2 className="animate-spin w-4 h-4" /> : 'Distribute Prizes'}
+                          Cancel
                         </Button>
                       )}
                     </div>
@@ -261,6 +273,69 @@ export default function AdminDashboard() {
               ))
             }
           </div>
+
+          {/* Results Entry Modal */}
+          <Dialog open={!!activeResultsTourney} onOpenChange={() => setActiveResultsTourney(null)}>
+             <DialogContent className="bg-[#1A1A1A] border-white/5 rounded-[2.5rem] max-w-2xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-headline font-bold">Battle Results: {activeResultsTourney?.title}</DialogTitle>
+                  <DialogDescription>Input final performance stats for all participants.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  {playerResults.map((p, idx) => (
+                    <div key={p.userId} className="flex items-center gap-4 bg-white/5 p-3 rounded-xl border border-white/5">
+                      <span className="text-xs font-bold w-24 truncate">{p.username}</span>
+                      <div className="flex-1 grid grid-cols-3 gap-2">
+                        <div>
+                          <Label className="text-[8px] uppercase">Kills</Label>
+                          <Input 
+                            type="number" 
+                            className="h-8 text-xs bg-background" 
+                            value={p.kills} 
+                            onChange={e => {
+                              const newList = [...playerResults];
+                              newList[idx].kills = parseInt(e.target.value) || 0;
+                              setPlayerResults(newList);
+                            }} 
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[8px] uppercase">Place</Label>
+                          <Input 
+                            type="number" 
+                            className="h-8 text-xs bg-background" 
+                            value={p.placement} 
+                            onChange={e => {
+                              const newList = [...playerResults];
+                              newList[idx].placement = parseInt(e.target.value) || 0;
+                              setPlayerResults(newList);
+                            }} 
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[8px] uppercase">Prize (₹)</Label>
+                          <Input 
+                            type="number" 
+                            className="h-8 text-xs bg-background" 
+                            value={p.prize} 
+                            onChange={e => {
+                              const newList = [...playerResults];
+                              newList[idx].prize = parseInt(e.target.value) || 0;
+                              setPlayerResults(newList);
+                            }} 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <DialogFooter>
+                   <Button className="w-full bg-primary text-black font-black rounded-xl h-12" onClick={handleSaveResults} disabled={isProcessing === 'submitting-results'}>
+                      {isProcessing === 'submitting-results' ? <Loader2 className="animate-spin" /> : 'FINALIZE & DISTRIBUTE'}
+                   </Button>
+                </DialogFooter>
+             </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="payouts" className="space-y-6">
