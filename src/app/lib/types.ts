@@ -1,5 +1,6 @@
 
 export type TournamentStatus = 'open' | 'full' | 'ongoing' | 'completed' | 'cancelled';
+export type UserRole = 'user' | 'admin';
 
 export interface Tournament {
   id: string;
@@ -22,6 +23,7 @@ export interface Tournament {
 export interface User {
   uid: string;
   username: string;
+  role: UserRole;
   gameUsername?: string;
   gameUid: string;
   gameRegion?: string;
@@ -64,16 +66,4 @@ export interface PlayerStats {
   totalWins: number;
   totalScore: number;
   updatedAt: string;
-}
-
-export interface LeaderboardEntry {
-  matchId: string;
-  rank: number;
-  userId: string;
-  username: string;
-  kills: number;
-  score: number;
-  position: number;
-  prizeWon: number;
-  generatedAt: string;
 }

@@ -7,6 +7,7 @@
       "type": "object",
       "properties": {
         "username": { "type": "string", "description": "App display name" },
+        "role": { "type": "string", "enum": ["user", "admin"], "default": "user" },
         "gameUsername": { "type": "string", "description": "Free Fire In-game Name" },
         "gameUid": { "type": "string", "description": "Free Fire numeric UID" },
         "gameRegion": { "type": "string", "enum": ["India", "Bangladesh", "Pakistan", "Nepal"] },

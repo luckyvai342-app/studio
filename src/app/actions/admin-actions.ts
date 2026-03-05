@@ -235,59 +235,66 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
 }
 
 /**
- * Cancels a tournament and refunds all entry fees.
+ * Adjusts user wallet balance manually (Admin only).
  */
-export async function refundTournamentAction(tournamentId: string, adminId: string) {
+export async function adjustUserWalletAction(adminId: string, userId: string, amount: number, reason: string) {
   const { db } = initializeFirebase();
-
   try {
-    const participantsRef = collection(db, 'tournaments', tournamentId, 'participants');
-    const participantsSnap = await getDocs(participantsRef);
-    const tourneyRef = doc(db, 'tournaments', tournamentId);
-    
     await runTransaction(db, async (transaction) => {
-      const tDoc = await transaction.get(tourneyRef);
-      if (!tDoc.exists()) throw new Error("Tournament not found");
-      if (tDoc.data().status === 'cancelled') throw new Error("Tournament already cancelled");
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await transaction.get(userRef);
+      if (!userSnap.exists()) throw new Error("User not found");
+      
+      const newBalance = (userSnap.data().walletBalance || 0) + amount;
+      transaction.update(userRef, {
+        walletBalance: newBalance,
+        lastActionAt: serverTimestamp()
+      });
 
-      const entryFee = tDoc.data().entryFee;
-
-      for (const pDoc of participantsSnap.docs) {
-        const userId = pDoc.id;
-        const userRef = doc(db, 'users', userId);
-        const userSnap = await transaction.get(userRef);
-
-        if (userSnap.exists()) {
-          transaction.update(userRef, {
-            walletBalance: userSnap.data().walletBalance + entryFee,
-            lastActionAt: serverTimestamp()
-          });
-
-          const txRef = doc(collection(db, 'users', userId, 'transactions'));
-          transaction.set(txRef, {
-            amount: entryFee,
-            type: 'refund',
-            status: 'completed',
-            referenceId: tournamentId,
-            createdAt: new Date().toISOString()
-          });
-        }
-      }
-
-      transaction.update(tourneyRef, { status: 'cancelled' });
+      const txRef = doc(collection(db, 'users', userId, 'transactions'));
+      transaction.set(txRef, {
+        amount: Math.abs(amount),
+        type: amount > 0 ? 'deposit' : 'withdrawal',
+        status: 'completed',
+        referenceId: `admin_adj_${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        notes: reason
+      });
 
       const auditRef = doc(collection(db, 'audit_logs'));
       transaction.set(auditRef, {
-        adminId: adminId,
-        action: 'TOURNAMENT_REFUND',
-        targetId: tournamentId,
-        details: `Cancelled tournament and refunded fees.`,
+        adminId,
+        action: 'WALLET_ADJUSTMENT',
+        targetId: userId,
+        details: `Adjusted wallet by ${amount}. Reason: ${reason}`,
         timestamp: serverTimestamp()
       });
     });
-
     return { success: true };
-  } catch (error: any) {
-    throw new Error(error.message);
+  } catch (e: any) {
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Bans or Unbans a user.
+ */
+export async function toggleUserStatusAction(adminId: string, userId: string, newStatus: 'active' | 'suspended' | 'banned') {
+  const { db } = initializeFirebase();
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { status: newStatus });
+    
+    const auditRef = doc(collection(db, 'audit_logs'));
+    await setDoc(auditRef, {
+      adminId,
+      action: 'USER_STATUS_CHANGE',
+      targetId: userId,
+      details: `User status changed to ${newStatus}`,
+      timestamp: serverTimestamp()
+    });
+    return { success: true };
+  } catch (e: any) {
+    throw new Error(e.message);
   }
 }
