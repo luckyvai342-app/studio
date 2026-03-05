@@ -53,15 +53,14 @@ service cloud.firestore {
     }
 
     match /playerStats/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if true; // Publicly visible leaderboards
       allow write: if isAdmin();
     }
 
     // --- Tournament Rules ---
     
     match /tournaments/{tournamentId} {
-      allow get: if isAuthenticated();
-      allow list: if isAuthenticated();
+      allow get, list: if true; // Allow public browsing of tournaments
       allow write: if isAdmin();
 
       match /participants/{userId} {
@@ -69,10 +68,16 @@ service cloud.firestore {
         allow create: if isOwner(userId) && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId));
         allow update, delete: if isAdmin();
       }
+
+      match /resultSubmissions/{submissionId} {
+        allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isAdmin();
+      }
     }
 
     match /leaderboards/{matchId}/entries/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAdmin();
     }
 

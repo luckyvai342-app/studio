@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect } from 'react';
@@ -11,13 +12,17 @@ export function FirebaseErrorListener() {
   useEffect(() => {
     const handlePermissionError = (error: FirestorePermissionError) => {
       // Log for developer context (Next.js overlay will pick this up in dev)
-      console.error('Security Rule Violation:', error.context);
-
-      toast({
-        variant: 'destructive',
-        title: 'Security Access Denied',
-        description: `Operation "${error.context.operation}" on ${error.context.path} was rejected. Please contact support if this persists.`,
-      });
+      if (error.context) {
+        console.error('Security Rule Violation:', error.context);
+        
+        toast({
+          variant: 'destructive',
+          title: 'Security Access Denied',
+          description: `Operation "${error.context.operation}" on ${error.context.path} was rejected. Please contact support if this persists.`,
+        });
+      } else {
+        console.error('Firebase Permission Error:', error.message);
+      }
     };
 
     errorEmitter.on('permission-error', handlePermissionError);
