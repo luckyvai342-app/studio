@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from 'react';
@@ -24,6 +25,11 @@ export default function LoginPage() {
     phone: '',
     otp: ''
   });
+
+  const generateReferralCode = (name: string) => {
+    const random = Math.floor(1000 + Math.random() * 9000);
+    return `${name.substring(0, 3).toUpperCase()}${random}`;
+  };
 
   const handleInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,19 +63,20 @@ export default function LoginPage() {
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
-        // Assign admin role if "admin" is in the name for testing purposes
         const role = formData.name.toLowerCase().includes('admin') ? 'admin' : 'user';
         
         await setDoc(userRef, {
           username: formData.name,
           role: role,
           gameUid: formData.ffid,
-          gameUsername: formData.name, // Default IGN to display name
+          gameUsername: formData.name,
           gameRegion: 'India',
           phone: formData.phone,
           walletBalance: 0,
           accountVerified: false,
           status: 'active',
+          referralCode: generateReferralCode(formData.name),
+          matchesPlayed: 0,
           createdAt: serverTimestamp()
         });
       }

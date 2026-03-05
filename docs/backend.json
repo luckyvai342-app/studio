@@ -15,11 +15,14 @@
         "status": { "type": "string", "enum": ["active", "suspended", "banned"] },
         "phone": { "type": "string" },
         "walletBalance": { "type": "number" },
+        "referralCode": { "type": "string" },
+        "referredBy": { "type": "string" },
+        "matchesPlayed": { "type": "number", "default": 0 },
         "lastUidUpdate": { "type": "string", "format": "date-time" },
         "lastActionAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["username", "gameUid", "phone", "walletBalance"]
+      "required": ["username", "gameUid", "phone", "walletBalance", "referralCode"]
     },
     "Tournament": {
       "title": "Tournament",
@@ -42,23 +45,10 @@
         "roomDistributed": { "type": "boolean" },
         "resultsUploaded": { "type": "boolean" }
       }
-    },
-    "Notification": {
-      "title": "Notification",
-      "description": "In-app alerts for players",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "matchId": { "type": "string" },
-        "read": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
     }
   },
   "auth": {
-    "providers": ["phone"]
+    "providers": ["phone", "anonymous"]
   },
   "firestore": {
     "/users/{userId}": {
@@ -66,29 +56,22 @@
       "description": "User profile and battle identity"
     },
     "/notifications/{notificationId}": {
-      "schema": "#/backend/entities/Notification",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string" },
+          "title": { "type": "string" },
+          "message": { "type": "string" },
+          "matchId": { "type": "string" },
+          "read": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
       "description": "User specific notifications"
     },
     "/tournaments/{tournamentId}": {
       "schema": "#/backend/entities/Tournament",
       "description": "Main tournament metadata"
-    },
-    "/tournaments/{tournamentId}/participants/{userId}": {
-      "schema": {
-        "type": "object",
-        "properties": {
-          "userId": { "type": "string" },
-          "username": { "type": "string" },
-          "gameUid": { "type": "string" },
-          "gameUsername": { "type": "string" },
-          "kills": { "type": "number" },
-          "placement": { "type": "number" },
-          "score": { "type": "number" },
-          "prizeWon": { "type": "number" },
-          "joinedAt": { "type": "string", "format": "date-time" }
-        }
-      },
-      "description": "Participants list with performance data"
     }
   }
 }
