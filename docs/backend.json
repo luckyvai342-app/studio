@@ -3,17 +3,21 @@
   "entities": {
     "UserProfile": {
       "title": "User Profile",
-      "description": "User account and wallet information",
+      "description": "User account and battle identity",
       "type": "object",
       "properties": {
-        "username": { "type": "string" },
-        "freeFireId": { "type": "string" },
+        "username": { "type": "string", "description": "App display name" },
+        "gameUsername": { "type": "string", "description": "Free Fire In-game Name" },
+        "gameUid": { "type": "string", "description": "Free Fire numeric UID" },
+        "gameRegion": { "type": "string", "enum": ["India", "Bangladesh", "Pakistan", "Nepal"] },
+        "accountVerified": { "type": "boolean" },
         "phone": { "type": "string" },
         "walletBalance": { "type": "number" },
+        "lastUidUpdate": { "type": "string", "format": "date-time" },
         "lastActionAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["username", "freeFireId", "phone", "walletBalance"]
+      "required": ["username", "gameUid", "phone", "walletBalance"]
     },
     "Tournament": {
       "title": "Tournament",
@@ -46,42 +50,6 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "amount", "type", "status", "createdAt"]
-    },
-    "PaymentOrder": {
-      "title": "Payment Order",
-      "description": "Razorpay order tracking",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "amount": { "type": "number" },
-        "currency": { "type": "string" },
-        "razorpayOrderId": { "type": "string", "description": "The unique order ID from Razorpay" },
-        "razorpayPaymentId": { "type": "string", "description": "The unique payment ID from Razorpay (set after success)" },
-        "status": { "type": "string", "enum": ["created", "paid", "failed"] },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["userId", "amount", "razorpayOrderId", "status", "createdAt"]
-    },
-    "AuditLog": {
-      "title": "Audit Log",
-      "description": "System-wide security and activity logs",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "action": { "type": "string" },
-        "details": { "type": "string" },
-        "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
-        "timestamp": { "type": "string", "format": "date-time" }
-      }
-    },
-    "WebhookEvent": {
-      "title": "Webhook Event",
-      "description": "Idempotency tracking for payment events",
-      "type": "object",
-      "properties": {
-        "eventId": { "type": "string" },
-        "processedAt": { "type": "string", "format": "date-time" }
-      }
     }
   },
   "auth": {
@@ -90,7 +58,7 @@
   "firestore": {
     "/users/{userId}": {
       "schema": "#/entities/UserProfile",
-      "description": "User profile and balance"
+      "description": "User profile and battle identity"
     },
     "/tournaments/{tournamentId}": {
       "schema": "#/entities/Tournament",
@@ -101,27 +69,13 @@
         "type": "object",
         "properties": {
           "username": { "type": "string" },
+          "gameUid": { "type": "string" },
+          "gameUsername": { "type": "string" },
           "kills": { "type": "number" },
           "joinedAt": { "type": "string", "format": "date-time" }
         }
       },
-      "description": "Participants list"
-    },
-    "/users/{userId}/transactions/{transactionId}": {
-      "schema": "#/entities/Transaction",
-      "description": "User financial history"
-    },
-    "/paymentOrders/{orderId}": {
-      "schema": "#/entities/PaymentOrder",
-      "description": "Razorpay order records"
-    },
-    "/webhook_events/{eventId}": {
-      "schema": "#/entities/WebhookEvent",
-      "description": "Idempotency logs"
-    },
-    "/audit_logs/{logId}": {
-      "schema": "#/entities/AuditLog",
-      "description": "Security audit trails"
+      "description": "Participants list with game identity"
     }
   }
 }

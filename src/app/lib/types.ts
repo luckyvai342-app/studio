@@ -19,9 +19,13 @@ export interface Tournament {
 export interface User {
   uid: string;
   username: string;
-  freeFireId: string;
+  gameUsername?: string;
+  gameUid: string;
+  gameRegion?: string;
+  accountVerified: boolean;
   phone: string;
   walletBalance: number;
+  lastUidUpdate?: string;
   createdAt: string;
 }
 
@@ -35,20 +39,11 @@ export interface Transaction {
   referenceId?: string;
 }
 
-export interface PaymentOrder {
-  id: string;
-  userId: string;
-  amount: number;
-  currency: string;
-  razorpayOrderId: string;
-  razorpayPaymentId?: string;
-  status: 'created' | 'paid' | 'failed';
-  createdAt: string;
-}
-
 export interface Participant {
   userId: string;
   username: string;
+  gameUid: string;
+  gameUsername: string;
   kills: number;
   damage: number;
   placement: number;

@@ -1,34 +1,97 @@
 
 "use client"
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Settings, LogOut, ShieldCheck, Gamepad2, Medal, User as UserIcon, ChevronRight, Trophy, Zap, Share2 } from 'lucide-react';
+import { useState } from 'react';
+import { Settings, LogOut, ShieldCheck, Gamepad2, Medal, User as UserIcon, ChevronRight, Trophy, Zap, Share2, Loader2, Save, Globe } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { useFirestore, useUser, useDoc } from '@/firebase';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const [userData, setUserData] = useState<any>(null);
+  const { toast } = useToast();
+  const db = useFirestore();
+  const { user: authUser } = useUser();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const userRef = authUser ? doc(db, 'users', authUser.uid) : null;
+  const { data: userData, loading } = useDoc<any>(userRef);
+
   const avatarImg = PlaceHolderImages.find(img => img.id === 'avatar-user');
 
-  useEffect(() => {
-    const user = localStorage.getItem('ff_user');
-    if (user) {
-      setUserData(JSON.parse(user));
-    }
-  }, []);
+  const [battleAccount, setBattleAccount] = useState({
+    gameUid: '',
+    gameUsername: '',
+    gameRegion: 'India'
+  });
 
-  const handleLogout = () => {
-    localStorage.removeItem('ff_user');
-    router.push('/login');
+  // Sync state once data loads
+  useState(() => {
+    if (userData) {
+      setBattleAccount({
+        gameUid: userData.gameUid || '',
+        gameUsername: userData.gameUsername || '',
+        gameRegion: userData.gameRegion || 'India'
+      });
+    }
+  });
+
+  const handleUpdateBattleAccount = async () => {
+    if (!userRef || !userData) return;
+    
+    // Validation
+    if (!/^\d+$/.test(battleAccount.gameUid)) {
+      toast({ variant: "destructive", title: "Invalid UID", description: "Free Fire UID must contain only numbers." });
+      return;
+    }
+    if (!battleAccount.gameUsername.trim()) {
+      toast({ variant: "destructive", title: "Missing Name", description: "In-game name cannot be empty." });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updates: any = {
+        gameUsername: battleAccount.gameUsername,
+        gameRegion: battleAccount.gameRegion,
+        lastActionAt: serverTimestamp(),
+      };
+
+      // Only track lastUidUpdate if the UID actually changed
+      if (battleAccount.gameUid !== userData.gameUid) {
+        updates.gameUid = battleAccount.gameUid;
+        updates.lastUidUpdate = serverTimestamp();
+      }
+
+      await updateDoc(userRef, updates);
+      toast({ title: "Account Linked", description: "Your battle identity has been secured." });
+    } catch (error: any) {
+      toast({ 
+        variant: "destructive", 
+        title: "Update Failed", 
+        description: error.message.includes("cooldown") 
+          ? "You can only change your UID once every 24 hours." 
+          : "Permission denied. Check cooldown or network." 
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  if (!userData) return null;
+  const handleLogout = () => {
+    // Basic logout logic for prototype
+    window.location.href = '/login';
+  };
+
+  if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
     <div className="flex flex-col min-h-screen animate-in-fade bg-[#0D0D0D] p-4 pb-24">
@@ -50,44 +113,78 @@ export default function ProfilePage() {
             )}
           </div>
           <div className="absolute -bottom-2 -right-2 bg-primary p-2 rounded-2xl border-4 border-[#0D0D0D] shadow-lg">
-            <Zap className="w-5 h-5 text-black fill-black" />
+            {userData?.accountVerified ? <ShieldCheck className="w-5 h-5 text-black" /> : <Zap className="w-5 h-5 text-black fill-black" />}
           </div>
         </div>
-        <h2 className="text-2xl font-headline font-bold mb-2 tracking-tight">{userData.name}</h2>
+        <h2 className="text-2xl font-headline font-bold mb-2 tracking-tight">{userData?.username || 'Legend'}</h2>
         <div className="flex items-center gap-3">
-          <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase">
-            LVL 42 PRO
+          <Badge className={cn("px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase", userData?.accountVerified ? "bg-emerald-500 text-white" : "bg-primary/10 text-primary border-primary/20")}>
+            {userData?.accountVerified ? 'VERIFIED PRO' : 'ELITE WARRIOR'}
           </Badge>
           <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-            <Gamepad2 className="w-3 h-3 text-primary" /> ID: {userData.ffid}
+            <Gamepad2 className="w-3 h-3 text-primary" /> ID: {userData?.gameUid || 'NOT SET'}
           </div>
         </div>
       </div>
 
-      {/* High-Impact Stats Grid */}
-      <div className="grid grid-cols-3 gap-4 mb-10">
-        {[
-          { label: 'Battles', value: '142', icon: Gamepad2, color: 'text-primary', bg: 'bg-primary/5' },
-          { label: 'Victory', value: '38', icon: Trophy, color: 'text-[#00E0FF]', bg: 'bg-[#00E0FF]/5' },
-          { label: 'Kills', value: '1.2k', icon: ShieldCheck, color: 'text-rose-500', bg: 'bg-rose-500/5' },
-        ].map((stat, i) => (
-          <Card key={i} className="bg-[#1A1A1A]/40 border-white/5 text-center rounded-[2rem] group hover:border-primary/20 transition-all duration-300">
-            <CardContent className="p-6 flex flex-col items-center">
-              <div className={cn("p-3 rounded-2xl mb-3 transition-transform group-hover:scale-110", stat.bg)}>
-                <stat.icon className={cn("w-5 h-5", stat.color)} />
-              </div>
-              <p className="text-xl font-headline font-bold tracking-tight">{stat.value}</p>
-              <p className="text-[9px] text-muted-foreground uppercase font-black tracking-tighter">{stat.label}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Battle Account Settings Section */}
+      <Card className="bg-[#1A1A1A]/60 border-white/5 rounded-[2rem] overflow-hidden mb-10 backdrop-blur-md">
+        <CardHeader className="border-b border-white/5 pb-4">
+          <CardTitle className="text-sm font-headline flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-primary" /> Battle Account Link
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 space-y-5">
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Free Fire UID (Numeric Only)</Label>
+            <Input 
+              placeholder="e.g. 529381023"
+              value={battleAccount.gameUid}
+              onChange={(e) => setBattleAccount({...battleAccount, gameUid: e.target.value})}
+              className="bg-background/50 border-white/5 rounded-xl h-12 focus:border-primary/50"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">In-Game Name (IGN)</Label>
+            <Input 
+              placeholder="e.g. GHOST_FF"
+              value={battleAccount.gameUsername}
+              onChange={(e) => setBattleAccount({...battleAccount, gameUsername: e.target.value})}
+              className="bg-background/50 border-white/5 rounded-xl h-12 focus:border-primary/50"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Battle Region</Label>
+            <Select 
+              value={battleAccount.gameRegion} 
+              onValueChange={(val) => setBattleAccount({...battleAccount, gameRegion: val})}
+            >
+              <SelectTrigger className="bg-background/50 border-white/5 rounded-xl h-12">
+                <SelectValue placeholder="Select Region" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#1A1A1A] border-white/10">
+                <SelectItem value="India">India</SelectItem>
+                <SelectItem value="Bangladesh">Bangladesh</SelectItem>
+                <SelectItem value="Pakistan">Pakistan</SelectItem>
+                <SelectItem value="Nepal">Nepal</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button 
+            className="w-full bg-primary hover:bg-primary/90 text-black font-black h-14 rounded-2xl mt-4 shadow-lg shadow-primary/10"
+            disabled={isSaving}
+            onClick={handleUpdateBattleAccount}
+          >
+            {isSaving ? <Loader2 className="animate-spin" /> : <><Save className="w-4 h-4 mr-2" /> SAVE IDENTITY</>}
+          </Button>
+          <p className="text-[9px] text-center text-muted-foreground uppercase font-medium">UID changes restricted to once per 24 hours.</p>
+        </CardContent>
+      </Card>
 
-      {/* Polished Menu Options */}
+      {/* Menu Options */}
       <div className="space-y-4">
         {[
-          { icon: UserIcon, label: 'BATTLE ACCOUNT SETTINGS' },
-          { icon: ShieldCheck, label: 'IDENTITY VERIFICATION' },
+          { icon: UserIcon, label: 'FINANCIAL SETTINGS' },
           { icon: Medal, label: 'ELITE ACHIEVEMENTS' },
           { icon: LogOut, label: 'TERMINATE SESSION', danger: true, onClick: handleLogout },
         ].map((item, i) => (
@@ -109,15 +206,6 @@ export default function ProfilePage() {
             {!item.danger && <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />}
           </Button>
         ))}
-      </div>
-
-      <div className="mt-12 text-center pb-10">
-        <p className="text-[10px] text-muted-foreground uppercase font-black tracking-[0.3em] mb-2 opacity-30">INDIA X E-SPORT V1.1.0</p>
-        <div className="flex items-center justify-center gap-2 opacity-50">
-          <div className="h-[1px] w-8 bg-white/10" />
-          <p className="text-[9px] text-muted-foreground font-bold italic tracking-wider">ESTABLISHED FOR LEGENDS</p>
-          <div className="h-[1px] w-8 bg-white/10" />
-        </div>
       </div>
     </div>
   );

@@ -1,9 +1,10 @@
+
 "use client"
 
 import { useState, use } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, Share2, Info, Loader2, AlertCircle } from 'lucide-react';
+import { Trophy, Clock, Users, Map as MapIcon, Shield, ChevronLeft, Share2, Info, Loader2, AlertCircle, Gamepad2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ import { doc, runTransaction, serverTimestamp, collection } from 'firebase/fires
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 export default function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -32,6 +34,17 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
   const handleJoin = async () => {
     if (!authUser || !userProfile || !tournament) return;
     
+    // REQUIRE BATTLE ACCOUNT
+    if (!userProfile.gameUid || !userProfile.gameUsername) {
+      toast({ 
+        variant: "destructive", 
+        title: "Battle Identity Missing", 
+        description: "Please link your Free Fire UID in your Profile before joining matches." 
+      });
+      router.push('/profile');
+      return;
+    }
+
     setIsJoining(true);
     try {
       await runTransaction(db, async (transaction) => {
@@ -62,6 +75,8 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
         transaction.set(participantRef, {
           username: userData.username,
+          gameUid: userData.gameUid,
+          gameUsername: userData.gameUsername,
           kills: 0,
           joinedAt: serverTimestamp()
         });
@@ -70,7 +85,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
         transaction.set(logRef, {
           userId: authUser.uid,
           action: 'JOIN_TOURNAMENT',
-          details: `Joined ${tourneyData.title} (Fee: ${tourneyData.entryFee})`,
+          details: `Joined ${tourneyData.title} (Fee: ${tourneyData.entryFee}) as ${userData.gameUsername} (${userData.gameUid})`,
           severity: 'info',
           timestamp: serverTimestamp()
         });
@@ -112,6 +127,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
   const isFull = (tournament.joinedCount || 0) >= (tournament.maxPlayers || 0);
   const canAfford = userProfile && userProfile.walletBalance >= tournament.entryFee;
+  const hasBattleAccount = userProfile?.gameUid && userProfile?.gameUsername;
 
   return (
     <div className="flex flex-col min-h-screen animate-fade-in pb-40">
@@ -177,10 +193,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             <span>{tournament.joinedCount || 0} / {tournament.maxPlayers} Filled</span>
           </div>
           <Progress value={((tournament.joinedCount || 0) / (tournament.maxPlayers || 1)) * 100} className="h-2 bg-white/10" />
-          {isFull && (
-            <p className="text-[10px] text-rose-500 font-bold uppercase text-center mt-2 tracking-widest">THIS ARENA IS CURRENTLY FULL</p>
-          )}
         </div>
+
+        {!hasBattleAccount && (
+          <Alert className="bg-amber-500/10 border-amber-500/20 rounded-2xl">
+            <Gamepad2 className="h-4 w-4 text-amber-500" />
+            <AlertDescription className="text-xs text-amber-500 font-bold uppercase tracking-tight">
+              Action Required: Link your Free Fire UID in Profile to enable battle registration.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid grid-cols-2 gap-y-8 bg-white/5 p-6 rounded-[2rem] border border-white/5">
           <div className="flex items-start gap-4">
@@ -202,29 +224,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
             </div>
           </div>
         </div>
-
-        <div className="space-y-4">
-          <h3 className="text-xl font-headline font-bold flex items-center gap-2 tracking-tighter uppercase">
-            <Info className="w-5 h-5 text-primary" /> Battle Directives
-          </h3>
-          <p className="text-sm text-muted-foreground leading-relaxed font-medium">
-            {tournament.description || "No specific rules provided for this tournament. All standard Free Fire tournament rules apply."}
-          </p>
-        </div>
       </div>
 
-      {/* Fixed Join Bar with Logic */}
+      {/* Fixed Join Bar */}
       <div className="fixed bottom-0 left-0 right-0 p-6 z-50 pointer-events-none">
         <div className="max-w-md mx-auto pointer-events-auto">
           <div className="glass-morphism rounded-[2.5rem] p-6 border border-white/10 flex flex-col gap-4 shadow-[0_20px_60px_rgba(0,0,0,0.8)]">
-            {!canAfford && userProfile && (
-              <Alert className="bg-rose-500/10 border-rose-500/20 py-2">
-                <AlertDescription className="text-[10px] font-black text-rose-500 uppercase tracking-widest text-center">
-                  Insufficient Credits. Please top up ₹{tournament.entryFee - userProfile.walletBalance} to join.
-                </AlertDescription>
-              </Alert>
-            )}
-            
             <div className="flex items-center justify-between gap-6">
               <div className="flex flex-col">
                 <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Your Balance</span>
@@ -233,13 +238,15 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
               <Button 
                 className={cn(
                   "flex-1 font-black h-16 rounded-3xl shadow-lg transition-all active:scale-95 text-base uppercase tracking-tighter",
-                  canAfford && !isFull ? "bg-primary text-black shadow-primary/20 hover:bg-primary/90" : "bg-white/5 text-muted-foreground"
+                  canAfford && !isFull && hasBattleAccount ? "bg-primary text-black shadow-primary/20 hover:bg-primary/90" : "bg-white/5 text-muted-foreground"
                 )}
                 disabled={isJoining || isFull || !canAfford}
                 onClick={handleJoin}
               >
                 {isJoining ? (
                   <Loader2 className="animate-spin" />
+                ) : !hasBattleAccount ? (
+                  'LINK BATTLE ID'
                 ) : isFull ? (
                   'ARENA FULL'
                 ) : !canAfford ? (

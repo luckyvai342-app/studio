@@ -13,12 +13,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Admin check - used for Server Actions/Backend logic in this environment
     function isAdmin() {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
-    // Protection against rapid spamming (2 second cooldown)
+    // Protection against rapid spamming
     function isNotRateLimited(userId) {
       let userDoc = get(/databases/$(database)/documents/users/$(userId));
       return !exists(/databases/$(database)/documents/users/$(userId)) || 
@@ -26,56 +25,31 @@ service cloud.firestore {
              duration.value(request.time - timestamp.value(userDoc.data.lastActionAt)) > duration.value(2, 's');
     }
 
+    // Validation for Battle Account Cooldown (24 hours)
+    function canUpdateUid(userId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      return userDoc.data.lastUidUpdate == null || 
+             duration.value(request.time - timestamp.value(userDoc.data.lastUidUpdate)) > duration.value(24, 'h');
+    }
+
     // --- User Profile Rules ---
     
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
+      allow get: if isAuthenticated(); // Allow search by gameUid for verification
       allow list: if isAdmin();
       
-      // Users can only create a profile with 0 balance
       allow create: if isOwner(userId) 
-                    && request.resource.data.walletBalance == 0;
+                    && request.resource.data.walletBalance == 0
+                    && request.resource.data.accountVerified == false;
       
-      // CRITICAL: Users can NEVER update their own walletBalance.
-      // Only Admin (Server Actions) can update balance via SDK.
       allow update: if (
         isOwner(userId) 
+        // Prevent manual balance edits
         && request.resource.data.walletBalance == resource.data.walletBalance
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username', 'freeFireId', 'phone', 'lastActionAt'])
+        && request.resource.data.accountVerified == resource.data.accountVerified
+        // Enforce 24h cooldown if UID is changed
+        && (request.resource.data.gameUid == resource.data.gameUid || canUpdateUid(userId))
       ) || isAdmin();
-    }
-
-    // --- Transaction Rules ---
-    
-    match /users/{userId}/transactions/{transactionId} {
-      allow read: if isOwner(userId) || isAdmin();
-      
-      // Users can only create a 'pending' withdrawal request
-      allow create: if isOwner(userId) 
-                    && request.resource.data.status == 'pending'
-                    && request.resource.data.amount >= 100
-                    && request.resource.data.type == 'withdrawal'
-                    && isNotRateLimited(userId);
-      
-      allow update, delete: if isAdmin();
-    }
-
-    match /{path=**}/transactions/{transactionId} {
-      allow list: if isAdmin();
-    }
-
-    // --- Razorpay Payment Order Rules ---
-    
-    match /paymentOrders/{orderId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      
-      allow create: if isAuthenticated() 
-                    && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.status == 'created'
-                    && isNotRateLimited(request.auth.uid);
-      
-      allow update: if isAdmin();
-      allow delete: if false;
     }
 
     // --- Tournament Rules ---
@@ -90,23 +64,28 @@ service cloud.firestore {
         allow create: if isOwner(userId) 
                       && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId))
                       && request.resource.data.kills == 0
-                      && isNotRateLimited(userId);
+                      // Ensure Battle Account is linked before joining
+                      && get(/databases/$(database)/documents/users/$(userId)).data.gameUid != null;
         
         allow update, delete: if isAdmin();
       }
     }
 
-    // --- System Logs ---
-    
-    match /webhook_events/{eventId} {
-      allow read: if isAdmin();
-      allow write: if false; // Only via Server Action (Admin Context)
+    match /users/{userId}/transactions/{transactionId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.type == 'withdrawal';
+      allow update, delete: if isAdmin();
+    }
+
+    match /paymentOrders/{orderId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
     }
 
     match /audit_logs/{logId} {
       allow read: if isAdmin();
       allow create: if isAuthenticated();
-      allow update, delete: if false;
     }
   }
 }
