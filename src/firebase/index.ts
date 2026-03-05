@@ -5,11 +5,16 @@ import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 import { firebaseConfig } from './config';
 
+/**
+ * Initializes Firebase services with the provided configuration.
+ * Connects the Next.js frontend and backend logic to the Firebase Project.
+ */
 export function initializeFirebase() {
   const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
   const db = getFirestore(app);
   const auth = getAuth(app);
   const storage = getStorage(app);
+  
   return { app, db, auth, storage };
 }
 
