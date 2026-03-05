@@ -1,8 +1,7 @@
-
 "use server"
 
 import { initializeFirebase } from '@/firebase';
-import { doc, runTransaction, serverTimestamp, collection, getDocs, setDoc, getDoc, updateDoc, query, where } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, collection, setDoc, updateDoc, getDocs } from 'firebase/firestore';
 
 /**
  * Scoring helper based on official rules.
@@ -26,6 +25,8 @@ export async function createTournamentAction(adminId: string, tournamentData: an
   
   try {
     const tournamentRef = doc(collection(db, 'tournaments'));
+    const startTimeISO = new Date(tournamentData.startTime).toISOString();
+    
     const newTournament = {
       ...tournamentData,
       id: tournamentRef.id,
@@ -35,7 +36,7 @@ export async function createTournamentAction(adminId: string, tournamentData: an
       roomDistributed: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      startTime: new Date(tournamentData.startTime).toISOString(),
+      startTime: startTimeISO,
     };
 
     await setDoc(tournamentRef, newTournament);
@@ -128,7 +129,6 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
       if (!tourneySnap.exists()) throw new Error("Tournament not found");
       if (tourneySnap.data().resultsUploaded) throw new Error("Prizes already distributed for this tournament");
 
-      // Sort results by score to generate rank snapshot
       const calculatedResults = results.map(r => ({
         ...r,
         score: (r.kills * 2) + getPositionBonus(r.placement)
@@ -138,7 +138,6 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
         const res = calculatedResults[i];
         const rank = i + 1;
 
-        // 1. Update Participant Record
         const participantRef = doc(db, 'tournaments', tournamentId, 'participants', res.userId);
         transaction.update(participantRef, {
           kills: res.kills,
@@ -147,7 +146,6 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
           prizeWon: res.prize
         });
 
-        // 2. Update User Wallet (if prize won)
         const userRef = doc(db, 'users', res.userId);
         const userSnap = await transaction.get(userRef);
         
@@ -169,7 +167,6 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
             });
           }
 
-          // 3. Update Global Player Stats
           const statsRef = doc(db, 'playerStats', res.userId);
           const statsSnap = await transaction.get(statsRef);
           if (statsSnap.exists()) {
@@ -194,7 +191,6 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
           }
         }
 
-        // 4. Create Leaderboard Snapshot
         const lbRef = doc(db, 'leaderboards', tournamentId, 'entries', res.userId);
         transaction.set(lbRef, {
           matchId: tournamentId,
@@ -209,14 +205,12 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
         });
       }
 
-      // 5. Finalize Tournament
       transaction.update(tourneyRef, {
         status: 'completed',
         resultsUploaded: true,
         updatedAt: serverTimestamp()
       });
 
-      // Audit Log
       const auditRef = doc(collection(db, 'audit_logs'));
       transaction.set(auditRef, {
         adminId: adminId,
@@ -234,9 +228,6 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
   }
 }
 
-/**
- * Cancels a tournament and auto-refunds all joined participants.
- */
 export async function cancelTournamentAction(tournamentId: string, adminId: string) {
   const { db } = initializeFirebase();
   
@@ -255,7 +246,6 @@ export async function cancelTournamentAction(tournamentId: string, adminId: stri
       const participantsRef = collection(db, 'tournaments', tournamentId, 'participants');
       const participantsSnap = await getDocs(participantsRef);
 
-      // Refund each participant
       for (const pDoc of participantsSnap.docs) {
         const userId = pDoc.id;
         const userRef = doc(db, 'users', userId);
@@ -279,13 +269,11 @@ export async function cancelTournamentAction(tournamentId: string, adminId: stri
         }
       }
 
-      // Update Tournament Status
       transaction.update(tourneyRef, {
         status: 'cancelled',
         updatedAt: serverTimestamp()
       });
 
-      // Audit Log
       const auditRef = doc(collection(db, 'audit_logs'));
       transaction.set(auditRef, {
         adminId: adminId,
@@ -303,9 +291,6 @@ export async function cancelTournamentAction(tournamentId: string, adminId: stri
   }
 }
 
-/**
- * Adjusts user wallet balance manually (Admin only).
- */
 export async function adjustUserWalletAction(adminId: string, userId: string, amount: number, reason: string) {
   const { db } = initializeFirebase();
   try {
@@ -345,9 +330,6 @@ export async function adjustUserWalletAction(adminId: string, userId: string, am
   }
 }
 
-/**
- * Bans or Unbans a user.
- */
 export async function toggleUserStatusAction(adminId: string, userId: string, newStatus: 'active' | 'suspended' | 'banned') {
   const { db } = initializeFirebase();
   try {

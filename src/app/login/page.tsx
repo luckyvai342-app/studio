@@ -1,14 +1,16 @@
-
 "use client"
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Smartphone, User as UserIcon, Gamepad2, ShieldCheck, ArrowRight, Loader2, Zap } from 'lucide-react';
+import { Smartphone, User as UserIcon, Gamepad2, ArrowRight, Loader2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { initializeFirebase } from '@/firebase';
+import { signInAnonymously } from 'firebase/auth';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,34 +37,61 @@ export default function LoginPage() {
       setStep('otp');
       setIsLoading(false);
       toast({ title: "OTP Sent", description: "Use code 123456 to log in." });
-    }, 1200);
+    }, 1000);
   };
 
-  const handleOtpSubmit = (e: React.FormEvent) => {
+  const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.otp.length !== 6) {
-      toast({ variant: "destructive", title: "Invalid OTP", description: "Please enter the 6-digit code." });
+    if (formData.otp !== '123456') {
+      toast({ variant: "destructive", title: "Invalid OTP", description: "Please use the test code 123456." });
       return;
     }
+    
     setIsLoading(true);
-    // Simulate verification and login
-    setTimeout(() => {
-      const user = {
+    try {
+      const { auth, db } = initializeFirebase();
+      const userCredential = await signInAnonymously(auth);
+      const uid = userCredential.user.uid;
+
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        // Assign admin role if "admin" is in the name for testing purposes
+        const role = formData.name.toLowerCase().includes('admin') ? 'admin' : 'user';
+        
+        await setDoc(userRef, {
+          username: formData.name,
+          role: role,
+          gameUid: formData.ffid,
+          gameUsername: formData.name, // Default IGN to display name
+          gameRegion: 'India',
+          phone: formData.phone,
+          walletBalance: 0,
+          accountVerified: false,
+          status: 'active',
+          createdAt: serverTimestamp()
+        });
+      }
+
+      localStorage.setItem('ff_user', JSON.stringify({
+        uid: uid,
         name: formData.name,
-        ffid: formData.ffid,
-        phone: formData.phone,
         isLoggedIn: true
-      };
-      localStorage.setItem('ff_user', JSON.stringify(user));
-      setIsLoading(false);
-      router.push('/');
+      }));
+
       toast({ title: "Welcome Legend!", description: `Ready to dominate?` });
-    }, 1200);
+      router.push('/');
+    } catch (error: any) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Login Failed", description: error.message });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="flex flex-col min-h-screen items-center justify-center p-6 bg-[#0D0D0D] relative overflow-hidden">
-      {/* Background Decorative Elements */}
       <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-primary/10 rounded-full blur-[100px]" />
       <div className="absolute bottom-[-10%] left-[-10%] w-64 h-64 bg-primary/5 rounded-full blur-[100px]" />
 
@@ -129,7 +158,7 @@ export default function LoginPage() {
                     />
                   </div>
                 </div>
-                <Button className="w-full font-bold h-14 rounded-2xl bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20" disabled={isLoading}>
+                <Button type="submit" className="w-full font-bold h-14 rounded-2xl bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20" disabled={isLoading}>
                   {isLoading ? <Loader2 className="animate-spin" /> : (
                     <span className="flex items-center gap-2">CONTINUE <ArrowRight className="w-4 h-4" /></span>
                   )}
@@ -138,7 +167,7 @@ export default function LoginPage() {
             ) : (
               <form onSubmit={handleOtpSubmit} className="space-y-6">
                 <div className="space-y-3">
-                  <Label htmlFor="otp" className="text-[10px] uppercase font-bold text-muted-foreground text-center block">Enter 6-Digit Code</Label>
+                  <Label htmlFor="otp" className="text-[10px] uppercase font-bold text-muted-foreground text-center block">Enter 6-Digit Code (Use 123456)</Label>
                   <Input 
                     id="otp" 
                     placeholder="......" 
@@ -148,7 +177,7 @@ export default function LoginPage() {
                     onChange={(e) => setFormData({...formData, otp: e.target.value})}
                   />
                 </div>
-                <Button className="w-full font-bold h-14 rounded-2xl bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20" disabled={isLoading}>
+                <Button type="submit" className="w-full font-bold h-14 rounded-2xl bg-primary hover:bg-primary/90 text-black shadow-lg shadow-primary/20" disabled={isLoading}>
                   {isLoading ? <Loader2 className="animate-spin" /> : 'VERIFY & ENTER'}
                 </Button>
                 <button 
