@@ -19,19 +19,28 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
 
   useEffect(() => {
     if (!query) {
+      setData(null);
       setLoading(false);
       return;
     }
+
+    setLoading(true);
 
     const unsubscribe = onSnapshot(
       query,
       (snapshot: QuerySnapshot<T>) => {
         setData(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as T)));
         setLoading(false);
+        setError(null);
       },
       async (err) => {
-        // Attempt to extract path from internal query state if possible
-        const path = (query as any)._query?.path?.toString() || (query as any).path || 'unknown collection';
+        let path = 'unknown';
+        try {
+          if ('path' in query) path = (query as any).path;
+          else if ('_query' in query) path = (query as any)._query.path.toString();
+        } catch (e) {
+          path = 'collection/query';
+        }
         
         const permissionError = new FirestorePermissionError({
           path,

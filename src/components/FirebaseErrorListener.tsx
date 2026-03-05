@@ -11,17 +11,19 @@ export function FirebaseErrorListener() {
 
   useEffect(() => {
     const handlePermissionError = (error: FirestorePermissionError) => {
-      // Log for developer context (Next.js overlay will pick this up in dev)
-      if (error.context) {
-        console.error('Security Rule Violation:', error.context);
+      // Avoid excessive logging of empty context
+      if (error.context && error.context.path !== 'unknown') {
+        console.error('Security Rule Violation:', {
+          path: error.context.path,
+          operation: error.context.operation,
+          message: error.message
+        });
         
         toast({
           variant: 'destructive',
-          title: 'Security Access Denied',
-          description: `Operation "${error.context.operation}" on ${error.context.path} was rejected. Please contact support if this persists.`,
+          title: 'Access Denied',
+          description: `You do not have permission to ${error.context.operation} data at ${error.context.path}.`,
         });
-      } else {
-        console.error('Firebase Permission Error:', error.message);
       }
     };
 

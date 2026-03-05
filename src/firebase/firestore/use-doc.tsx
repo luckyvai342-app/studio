@@ -18,15 +18,19 @@ export function useDoc<T = DocumentData>(ref: DocumentReference<T> | null) {
 
   useEffect(() => {
     if (!ref) {
+      setData(null);
       setLoading(false);
       return;
     }
+
+    setLoading(true);
 
     const unsubscribe = onSnapshot(
       ref,
       (snapshot: DocumentSnapshot<T>) => {
         setData(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as T) : null);
         setLoading(false);
+        setError(null);
       },
       async (err) => {
         const permissionError = new FirestorePermissionError({
