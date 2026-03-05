@@ -75,7 +75,7 @@ export default function AdminDashboard() {
   const [roomDistTourney, setRoomDistTourney] = useState<any>(null);
   const [roomDetails, setRoomDetails] = useState({ roomId: '', password: '' });
 
-  // Queries - Only run these if the user is confirmed as an admin
+  // Queries - CRITICAL: Only run these if the user is confirmed as an admin to avoid Security Rule Violations
   const pendingWithdrawalsQuery = useMemo(() => {
     if (!isAdmin) return null;
     return query(collectionGroup(db, 'transactions'), where('type', '==', 'withdrawal'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));

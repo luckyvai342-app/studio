@@ -11,7 +11,7 @@ export function FirebaseErrorListener() {
 
   useEffect(() => {
     const handlePermissionError = (error: FirestorePermissionError) => {
-      // Avoid excessive logging of empty context
+      // Avoid excessive logging of empty context or "unknown" paths to reduce console noise
       if (error.context && error.context.path !== 'unknown') {
         console.error('Security Rule Violation:', {
           path: error.context.path,
@@ -22,7 +22,7 @@ export function FirebaseErrorListener() {
         toast({
           variant: 'destructive',
           title: 'Access Denied',
-          description: `You do not have permission to ${error.context.operation} data at ${error.context.path}.`,
+          description: `You do not have permission to ${error.context.operation} data. Please ensure you are logged in with the correct role.`,
         });
       }
     };

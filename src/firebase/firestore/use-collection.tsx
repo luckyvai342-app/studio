@@ -18,6 +18,7 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    // Gracefully handle null queries (e.g., when waiting for admin verification)
     if (!query) {
       setData(null);
       setLoading(false);
@@ -36,6 +37,7 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
       async (err) => {
         let path = 'unknown';
         try {
+          // Attempt to extract path for better debugging
           if ('path' in query) path = (query as any).path;
           else if ('_query' in query) path = (query as any)._query.path.toString();
         } catch (e) {

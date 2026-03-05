@@ -14,10 +14,8 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     // --- User Profile Rules ---
@@ -41,7 +39,7 @@ service cloud.firestore {
 
       match /transactions/{transactionId} {
         allow read: if isOwner(userId) || isAdmin();
-        allow write: if isAdmin(); // System updates only
+        allow write: if isAdmin(); 
       }
     }
 
@@ -53,19 +51,19 @@ service cloud.firestore {
     }
 
     match /playerStats/{userId} {
-      allow read: if true; // Publicly visible leaderboards
+      allow read: if true; 
       allow write: if isAdmin();
     }
 
     // --- Tournament Rules ---
     
     match /tournaments/{tournamentId} {
-      allow get, list: if true; // Allow public browsing of tournaments
+      allow get, list: if true; 
       allow write: if isAdmin();
 
       match /participants/{userId} {
         allow read: if isAuthenticated();
-        allow create: if isOwner(userId) && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId));
+        allow create: if isOwner(userId);
         allow update, delete: if isAdmin();
       }
 
@@ -74,11 +72,6 @@ service cloud.firestore {
         allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
         allow update, delete: if isAdmin();
       }
-    }
-
-    match /leaderboards/{matchId}/entries/{userId} {
-      allow read: if true;
-      allow write: if isAdmin();
     }
 
     // --- Audit & Payments ---
@@ -91,18 +84,13 @@ service cloud.firestore {
 
     match /audit_logs/{logId} {
       allow read: if isAdmin();
-      allow create: if isAuthenticated(); 
+      allow create: if isAuthenticated() || isAdmin(); 
     }
     
     match /webhook_events/{eventId} {
       allow read, write: if false; 
     }
 
-    match /admins/{adminId} {
-      allow read: if isAdmin();
-      allow write: if false;
-    }
-    
     match /system/settings {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
