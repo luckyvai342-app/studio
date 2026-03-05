@@ -70,6 +70,15 @@
         "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
         "timestamp": { "type": "string", "format": "date-time" }
       }
+    },
+    "WebhookEvent": {
+      "title": "Webhook Event",
+      "description": "Idempotency tracking for payment events",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string" },
+        "processedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -102,6 +111,10 @@
     "/paymentOrders/{orderId}": {
       "schema": "#/entities/PaymentOrder",
       "description": "Razorpay order records"
+    },
+    "/webhook_events/{eventId}": {
+      "schema": "#/entities/WebhookEvent",
+      "description": "Idempotency logs"
     },
     "/audit_logs/{logId}": {
       "schema": "#/entities/AuditLog",
