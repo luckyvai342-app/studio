@@ -2,11 +2,48 @@
 "use server"
 
 import { initializeFirebase } from '@/firebase';
-import { doc, runTransaction, serverTimestamp, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, collection, getDocs, setDoc } from 'firebase/firestore';
+
+/**
+ * Creates a new tournament record.
+ */
+export async function createTournamentAction(adminId: string, tournamentData: any) {
+  const { db } = initializeFirebase();
+  
+  try {
+    const tournamentRef = doc(collection(db, 'tournaments'));
+    const newTournament = {
+      ...tournamentData,
+      id: tournamentRef.id,
+      joinedCount: 0,
+      status: 'open',
+      resultsUploaded: false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      startTime: new Date(tournamentData.startTime).toISOString(),
+    };
+
+    await setDoc(tournamentRef, newTournament);
+
+    // Audit Log
+    const auditRef = doc(collection(db, 'audit_logs'));
+    await setDoc(auditRef, {
+      adminId: adminId,
+      action: 'CREATE_TOURNAMENT',
+      targetId: tournamentRef.id,
+      details: `Created tournament: ${newTournament.title}`,
+      timestamp: serverTimestamp()
+    });
+
+    return { success: true, id: tournamentRef.id };
+  } catch (error: any) {
+    console.error('[ADMIN ERROR] Create Tournament Failed:', error);
+    throw new Error(error.message);
+  }
+}
 
 /**
  * Distributes prizes for a tournament based on ranking and kills.
- * Optimized for precision and idempotency.
  */
 export async function distributePrizesAction(tournamentId: string, adminId: string, results: { userId: string, prize: number }[]) {
   const { db } = initializeFirebase();
@@ -28,13 +65,11 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
         if (userSnap.exists()) {
           const currentBalance = userSnap.data().walletBalance || 0;
           
-          // Credit wallet
           transaction.update(userRef, {
             walletBalance: currentBalance + res.prize,
             lastActionAt: serverTimestamp()
           });
 
-          // Create prize transaction
           const txRef = doc(collection(db, 'users', res.userId, 'transactions'));
           transaction.set(txRef, {
             amount: res.prize,
@@ -46,14 +81,12 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
         }
       }
 
-      // Mark tournament as completed
       transaction.update(tourneyRef, {
         status: 'completed',
         resultsUploaded: true,
         updatedAt: serverTimestamp()
       });
 
-      // Audit Log
       const auditRef = doc(collection(db, 'audit_logs'));
       transaction.set(auditRef, {
         adminId: adminId,
@@ -66,7 +99,6 @@ export async function distributePrizesAction(tournamentId: string, adminId: stri
 
     return { success: true };
   } catch (error: any) {
-    console.error('[ADMIN ERROR] Prize Distribution Failed:', error);
     throw new Error(error.message);
   }
 }
@@ -81,9 +113,7 @@ export async function refundTournamentAction(tournamentId: string, adminId: stri
     const participantsRef = collection(db, 'tournaments', tournamentId, 'participants');
     const participantsSnap = await getDocs(participantsRef);
     const tourneyRef = doc(db, 'tournaments', tournamentId);
-    const tourneySnap = await (await initializeFirebase().db.collection('tournaments').doc(tournamentId).get()); // Using direct for speed if needed, but staying consistent
     
-    // In server actions we use runTransaction for safety
     await runTransaction(db, async (transaction) => {
       const tDoc = await transaction.get(tourneyRef);
       if (!tDoc.exists()) throw new Error("Tournament not found");
@@ -120,7 +150,7 @@ export async function refundTournamentAction(tournamentId: string, adminId: stri
         adminId: adminId,
         action: 'TOURNAMENT_REFUND',
         targetId: tournamentId,
-        details: `Cancelled tournament and refunded entry fees to ${participantsSnap.size} players.`,
+        details: `Cancelled tournament and refunded fees.`,
         timestamp: serverTimestamp()
       });
     });

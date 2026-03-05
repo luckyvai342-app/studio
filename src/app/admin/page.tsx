@@ -5,13 +5,16 @@ import { useState, useMemo } from 'react';
 import { 
   LayoutDashboard, Trophy, Users, Wallet, ShieldAlert, History, 
   Settings, Loader2, CheckCircle, XCircle, AlertTriangle, 
-  Search, Plus, Eye, DollarSign, Ban, RefreshCw 
+  Search, Plus, Eye, DollarSign, Ban, RefreshCw, Save
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFirestore, useCollection, useUser } from '@/firebase';
 import { 
   collectionGroup, query, where, doc, updateDoc, 
@@ -19,15 +22,28 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { approveWithdrawalAction } from '@/app/actions';
-import { distributePrizesAction, refundTournamentAction } from '@/app/actions/admin-actions';
+import { distributePrizesAction, refundTournamentAction, createTournamentAction } from '@/app/actions/admin-actions';
 
 export default function AdminDashboard() {
   const { toast } = useToast();
   const db = useFirestore();
   const { user: authUser } = useUser();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+
+  // New Tournament Form State
+  const [newTournament, setNewTournament] = useState({
+    title: '',
+    description: '',
+    entryFee: 50,
+    totalPrize: 1000,
+    maxPlayers: 48,
+    map: 'Bermuda',
+    type: 'Solo',
+    startTime: new Date().toISOString().slice(0, 16),
+    imageUrl: 'https://picsum.photos/seed/tourney/400/250'
+  });
 
   // Queries
   const pendingWithdrawalsQuery = useMemo(() => {
@@ -51,6 +67,20 @@ export default function AdminDashboard() {
   const { data: tournaments, loading: tournamentsLoading } = useCollection<any>(allTournamentsQuery);
   const { data: auditLogs, loading: logsLoading } = useCollection<any>(recentLogsQuery);
 
+  const handleCreateTournament = async () => {
+    if (!newTournament.title || !authUser) return;
+    setIsProcessing('creating');
+    try {
+      await createTournamentAction(authUser.uid, newTournament);
+      toast({ title: "Battle Deployed", description: `${newTournament.title} is now live.` });
+      setIsCreateDialogOpen(false);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Deployment Failed", description: e.message });
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
   const handleApproveWithdrawal = async (tx: any) => {
     setIsProcessing(tx.id);
     try {
@@ -66,14 +96,9 @@ export default function AdminDashboard() {
   };
 
   const handleDistributePrizes = async (tourneyId: string) => {
-    // Mock result distribution for prototype
     setIsProcessing(tourneyId);
     try {
-      // In a real scenario, you'd fetch participants first and allow ranking input
-      const mockResults = [
-        { userId: 'USER_MOCK_1', prize: 1000 },
-        { userId: 'USER_MOCK_2', prize: 500 }
-      ];
+      const mockResults = [{ userId: 'system', prize: 0 }]; // Logic placeholder
       await distributePrizesAction(tourneyId, authUser?.uid || 'system', mockResults);
       toast({ title: "Prizes Distributed", description: "Warriors have been paid." });
     } catch (e: any) {
@@ -131,19 +156,6 @@ export default function AdminDashboard() {
               </Card>
             ))}
           </div>
-
-          <Card className="bg-white/5 border-white/5 rounded-[2.5rem] overflow-hidden">
-            <CardHeader className="p-6 border-b border-white/5 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-headline">High Priority Alerts</CardTitle>
-              <Badge className="bg-rose-500/20 text-rose-500 border-rose-500/30">CRITICAL</Badge>
-            </CardHeader>
-            <CardContent className="p-0">
-               <div className="p-8 text-center text-muted-foreground text-xs">
-                  <AlertTriangle className="w-8 h-8 mx-auto mb-3 opacity-20" />
-                  No high-risk activity detected in the last 24 hours.
-               </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="tournaments" className="space-y-6">
@@ -152,9 +164,55 @@ export default function AdminDashboard() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search tournaments..." className="pl-12 bg-white/5 border-white/5 rounded-2xl h-12" />
             </div>
-            <Button className="bg-primary text-black font-black rounded-2xl h-12 px-6 flex gap-2">
-              <Plus className="w-4 h-4" /> NEW BATTLE
-            </Button>
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-primary text-black font-black rounded-2xl h-12 px-6 flex gap-2">
+                  <Plus className="w-4 h-4" /> NEW BATTLE
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-[#1A1A1A] border-white/5 rounded-[2.5rem] max-w-lg">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-headline font-bold">Deploy New Battle</DialogTitle>
+                  <DialogDescription>Configure match parameters for the arena.</DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-4 py-4">
+                  <div className="col-span-2 space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Match Title</Label>
+                    <Input value={newTournament.title} onChange={e => setNewTournament({...newTournament, title: e.target.value})} className="bg-background/50 border-white/10" placeholder="e.g. Sunday Super Cup" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Entry Fee (₹)</Label>
+                    <Input type="number" value={newTournament.entryFee} onChange={e => setNewTournament({...newTournament, entryFee: parseInt(e.target.value)})} className="bg-background/50 border-white/10" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Prize Pool (₹)</Label>
+                    <Input type="number" value={newTournament.totalPrize} onChange={e => setNewTournament({...newTournament, totalPrize: parseInt(e.target.value)})} className="bg-background/50 border-white/10" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Max Players</Label>
+                    <Input type="number" value={newTournament.maxPlayers} onChange={e => setNewTournament({...newTournament, maxPlayers: parseInt(e.target.value)})} className="bg-background/50 border-white/10" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Map</Label>
+                    <Select value={newTournament.map} onValueChange={v => setNewTournament({...newTournament, map: v})}>
+                      <SelectTrigger className="bg-background/50 border-white/10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Bermuda">Bermuda</SelectItem>
+                        <SelectItem value="Purgatory">Purgatory</SelectItem>
+                        <SelectItem value="Kalahari">Kalahari</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button className="w-full bg-primary text-black font-black rounded-xl h-12" onClick={handleCreateTournament} disabled={isProcessing === 'creating'}>
+                    {isProcessing === 'creating' ? <Loader2 className="animate-spin" /> : 'DEPLOY TOURNAMENT'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <div className="space-y-4">
@@ -177,7 +235,6 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" className="rounded-xl h-10 border border-white/5">Details</Button>
                       {t.status === 'open' && (
                         <Button 
                           size="sm" 
@@ -226,12 +283,11 @@ export default function AdminDashboard() {
                           <div>
                             <p className="font-bold text-lg">₹{tx.amount}</p>
                             <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">
-                              UID: {tx.userId?.substring(0, 10)} • {new Date(tx.createdAt).toLocaleString()}
+                              UID: {tx.userId?.substring(0, 10)}
                             </p>
                           </div>
                         </div>
                         <div className="flex gap-3">
-                          <Button variant="ghost" className="text-rose-500 rounded-xl">Reject</Button>
                           <Button 
                             className="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold px-6"
                             onClick={() => handleApproveWithdrawal(tx)}
