@@ -37,13 +37,14 @@ export default function AdminDashboard() {
     setProcessingId(tx.id);
 
     try {
-      // Call secure server action to process Stripe transfer and Wallet deduction
+      // Call secure server action to process Wallet deduction
+      // Refactored: Stripe integration removed.
       const result = await approveWithdrawalAction(tx.id, tx.userId, tx.amount);
       
       if (result.success) {
         toast({ 
-          title: "Withdrawal Successful", 
-          description: `₹${tx.amount} paid via Stripe. ID: ${result.transferId}` 
+          title: "Withdrawal Approved", 
+          description: `₹${tx.amount} balance has been deducted. Mark as paid manually.` 
         });
       }
     } catch (error: any) {
@@ -160,7 +161,7 @@ export default function AdminDashboard() {
                         disabled={!!processingId}
                         onClick={() => handleApproveWithdrawal(tx)}
                       >
-                        {processingId === tx.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve & Pay'}
+                        {processingId === tx.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve & Deduct'}
                       </Button>
                     </div>
                   </div>

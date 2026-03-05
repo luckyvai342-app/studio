@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import { useFirestore, useUser, useDoc, useCollection } from '@/firebase';
 import { doc, collection, query, orderBy, limit, addDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
-import { createStripeCheckoutSession } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -48,16 +47,6 @@ export default function WalletPage() {
 
   const { data: transactions, loading: txLoading } = useCollection<any>(transactionsQuery);
 
-  useEffect(() => {
-    if (searchParams.get('session_id') && authUser) {
-      toast({
-        title: "Deposit Initiated",
-        description: "Your payment is being processed. Credits will reflect shortly.",
-      });
-      router.replace('/wallet');
-    }
-  }, [searchParams, authUser, router, toast]);
-
   const handleDeposit = async () => {
     if (!authUser || !depositAmount) return;
     const amountNum = parseInt(depositAmount);
@@ -68,24 +57,34 @@ export default function WalletPage() {
 
     setIsProcessing(true);
     try {
+      /**
+       * RAZORPAY INTEGRATION STEP:
+       * Instead of Stripe Checkout, you will:
+       * 1. Call your backend to create a Razorpay Order.
+       * 2. Initialize Razorpay Checkout on the client.
+       * 3. Handle the payment success callback.
+       */
+      
       await addDoc(collection(db, 'users', authUser.uid, 'transactions'), {
         userId: authUser.uid,
         amount: amountNum,
         type: 'deposit',
         status: 'pending',
         createdAt: new Date().toISOString(),
-        referenceId: 'stripe_pending'
+        referenceId: 'razorpay_pending_placeholder'
       });
 
-      const { url } = await createStripeCheckoutSession(amountNum, authUser.uid);
-      if (url) {
-        window.location.href = url;
-      }
+      toast({
+        title: "Deposit Initiated",
+        description: "Razorpay integration is pending. This is a placeholder for the payment gateway.",
+      });
+      
+      setIsDepositOpen(false);
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Payment Error",
-        description: error.message || "Failed to start checkout",
+        title: "Deposit Error",
+        description: error.message || "Failed to initiate deposit",
       });
     } finally {
       setIsProcessing(false);
@@ -278,7 +277,7 @@ export default function WalletPage() {
           <DialogHeader>
             <DialogTitle className="text-2xl font-headline font-bold text-center">Top Up Credits</DialogTitle>
             <DialogDescription className="text-center text-muted-foreground">
-              Add funds to your battle wallet via Stripe secure gateway.
+              Add funds to your battle wallet via Razorpay secure gateway.
             </DialogDescription>
           </DialogHeader>
 
@@ -322,7 +321,7 @@ export default function WalletPage() {
               disabled={isProcessing || !depositAmount}
               onClick={handleDeposit}
             >
-              {isProcessing ? <Loader2 className="animate-spin" /> : 'SECURE CHECKOUT'}
+              {isProcessing ? <Loader2 className="animate-spin" /> : 'ADD CREDITS'}
             </Button>
           </DialogFooter>
         </DialogContent>
