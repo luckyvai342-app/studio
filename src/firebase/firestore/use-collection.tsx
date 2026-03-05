@@ -37,9 +37,15 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
       async (err) => {
         let path = 'unknown';
         try {
-          // Attempt to extract path for better debugging
-          if ('path' in query) path = (query as any).path;
-          else if ('_query' in query) path = (query as any)._query.path.toString();
+          // Robust path extraction for both regular and collectionGroup queries
+          if ('path' in query) {
+            path = (query as any).path;
+          } else if ('_query' in query) {
+            const internalQuery = (query as any)._query;
+            path = internalQuery.path 
+              ? internalQuery.path.toString() 
+              : `collectionGroup/${internalQuery.collectionId || 'unknown'}`;
+          }
         } catch (e) {
           path = 'collection/query';
         }

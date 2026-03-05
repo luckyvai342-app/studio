@@ -9,10 +9,6 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
     function isAdmin() {
       return isAuthenticated() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
@@ -24,30 +20,37 @@ service cloud.firestore {
       allow get: if isAuthenticated();
       allow list: if isAdmin();
       
-      allow create: if isOwner(userId) 
+      allow create: if isAuthenticated() && request.auth.uid == userId 
                     && request.resource.data.walletBalance == 0
-                    && request.resource.data.accountVerified == false
                     && request.resource.data.role == 'user';
       
-      allow update: if (
-        isOwner(userId) 
+      allow update: if isAdmin() || (
+        isAuthenticated() && request.auth.uid == userId 
         && request.resource.data.walletBalance == resource.data.walletBalance
-        && request.resource.data.accountVerified == resource.data.accountVerified
-        && request.resource.data.status == resource.data.status
         && request.resource.data.role == resource.data.role
-      ) || isAdmin();
+      );
 
       match /transactions/{transactionId} {
-        allow read: if isOwner(userId) || isAdmin();
+        allow read: if (isAuthenticated() && request.auth.uid == userId) || isAdmin();
         allow write: if isAdmin(); 
       }
+    }
+
+    // --- Support for collectionGroup queries ---
+    // This allows admins to query subcollections across the entire database
+    match /{path=**}/transactions/{transactionId} {
+      allow read: if isAdmin();
+    }
+    
+    match /{path=**}/resultSubmissions/{submissionId} {
+      allow read: if isAdmin();
     }
 
     match /notifications/{notifId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAdmin();
-      allow update: if isOwner(resource.data.userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
     }
 
     match /playerStats/{userId} {
@@ -63,7 +66,7 @@ service cloud.firestore {
 
       match /participants/{userId} {
         allow read: if isAuthenticated();
-        allow create: if isOwner(userId);
+        allow create: if isAuthenticated() && request.auth.uid == userId;
         allow update, delete: if isAdmin();
       }
 
@@ -77,23 +80,17 @@ service cloud.firestore {
     // --- Audit & Payments ---
 
     match /paymentOrders/{orderId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if isAdmin() || (isAuthenticated() && (resource.data.userId == request.auth.uid));
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update: if isAdmin();
     }
 
     match /audit_logs/{logId} {
-      allow read: if isAdmin();
-      allow create: if isAuthenticated() || isAdmin(); 
+      allow read, write: if isAdmin();
     }
     
     match /webhook_events/{eventId} {
       allow read, write: if false; 
-    }
-
-    match /system/settings {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
     }
   }
 }

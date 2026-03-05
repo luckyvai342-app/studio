@@ -50,7 +50,8 @@ export default function AdminDashboard() {
   const userProfileRef = authUser ? doc(db, 'users', authUser.uid) : null;
   const { data: adminProfile, loading: profileLoading } = useDoc<any>(userProfileRef);
 
-  const isAdmin = adminProfile?.role === 'admin';
+  // Strict Admin Gate: Only true if explicitly confirmed by Firestore profile
+  const isConfirmedAdmin = adminProfile?.role === 'admin' && !profileLoading;
 
   // Search States
   const [userSearch, setUserSearch] = useState('');
@@ -75,31 +76,40 @@ export default function AdminDashboard() {
   const [roomDistTourney, setRoomDistTourney] = useState<any>(null);
   const [roomDetails, setRoomDetails] = useState({ roomId: '', password: '' });
 
-  // Queries - CRITICAL: Only run these if the user is confirmed as an admin to avoid Security Rule Violations
+  // Gated Queries: Only initialize if admin status is confirmed
   const pendingWithdrawalsQuery = useMemo(() => {
-    if (!isAdmin) return null;
-    return query(collectionGroup(db, 'transactions'), where('type', '==', 'withdrawal'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
-  }, [db, isAdmin]);
+    if (!isConfirmedAdmin) return null;
+    return query(
+      collectionGroup(db, 'transactions'), 
+      where('type', '==', 'withdrawal'), 
+      where('status', '==', 'pending'), 
+      orderBy('createdAt', 'desc')
+    );
+  }, [db, isConfirmedAdmin]);
 
   const allTournamentsQuery = useMemo(() => {
-    if (!isAdmin) return null;
+    if (!isConfirmedAdmin) return null;
     return query(collection(db, 'tournaments'), orderBy('startTime', 'desc'), limit(50));
-  }, [db, isAdmin]);
+  }, [db, isConfirmedAdmin]);
 
   const allUsersQuery = useMemo(() => {
-    if (!isAdmin) return null;
+    if (!isConfirmedAdmin) return null;
     return query(collection(db, 'users'), limit(100));
-  }, [db, isAdmin]);
+  }, [db, isConfirmedAdmin]);
 
   const auditLogsQuery = useMemo(() => {
-    if (!isAdmin) return null;
+    if (!isConfirmedAdmin) return null;
     return query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'), limit(50));
-  }, [db, isAdmin]);
+  }, [db, isConfirmedAdmin]);
 
   const resultSubmissionsQuery = useMemo(() => {
-    if (!isAdmin) return null;
-    return query(collectionGroup(db, 'resultSubmissions'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
-  }, [db, isAdmin]);
+    if (!isConfirmedAdmin) return null;
+    return query(
+      collectionGroup(db, 'resultSubmissions'), 
+      where('status', '==', 'pending'), 
+      orderBy('createdAt', 'desc')
+    );
+  }, [db, isConfirmedAdmin]);
 
   const { data: withdrawals } = useCollection<any>(pendingWithdrawalsQuery);
   const { data: tournaments } = useCollection<any>(allTournamentsQuery);
@@ -116,7 +126,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!isAdmin) {
+  if (!isConfirmedAdmin) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-[#0D0D0D]">
         <ShieldAlert className="w-16 h-16 text-rose-500 mb-4" />
