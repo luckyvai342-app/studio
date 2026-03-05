@@ -1,9 +1,9 @@
-
 "use server"
 
 import { initializeFirebase } from '@/firebase';
-import { doc, runTransaction, serverTimestamp, collection, addDoc } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import Razorpay from 'razorpay';
+import crypto from 'crypto';
 
 /**
  * Server action to handle secure withdrawal approval.
@@ -101,5 +101,97 @@ export async function createRazorpayOrder(userId: string, amount: number) {
   } catch (error: any) {
     console.error('Razorpay Order Error:', error);
     throw new Error(error.message || "Failed to create payment order");
+  }
+}
+
+/**
+ * Server action to verify Razorpay payment and credit wallet.
+ * Implements cryptographic signature verification and atomic balance updates.
+ */
+export async function verifyRazorpayPayment(
+  razorpay_order_id: string,
+  razorpay_payment_id: string,
+  razorpay_signature: string
+) {
+  const { db } = initializeFirebase();
+  const key_secret = process.env.RAZORPAY_KEY_SECRET;
+
+  if (!key_secret) {
+    throw new Error("Razorpay secret is not configured.");
+  }
+
+  // 1. Verify Signature
+  const hmac = crypto.createHmac('sha256', key_secret);
+  hmac.update(razorpay_order_id + "|" + razorpay_payment_id);
+  const generated_signature = hmac.digest('hex');
+
+  if (generated_signature !== razorpay_signature) {
+    throw new Error("Invalid payment signature. Potential fraud detected.");
+  }
+
+  try {
+    // 2. Perform Atomic Wallet Credit
+    await runTransaction(db, async (transaction) => {
+      // Find the corresponding payment order in Firestore
+      const ordersRef = collection(db, 'paymentOrders');
+      const q = query(ordersRef, where('razorpayOrderId', '==', razorpay_order_id), limit(1));
+      const orderDocs = await getDocs(q);
+
+      if (orderDocs.empty) throw new Error("Payment order not found in database.");
+      
+      const orderDoc = orderDocs.docs[0];
+      const orderData = orderDoc.data();
+      const userId = orderData.userId;
+
+      if (orderData.status === 'paid') {
+        throw new Error("This payment has already been processed.");
+      }
+
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await transaction.get(userRef);
+
+      if (!userSnap.exists()) throw new Error("User profile not found.");
+      
+      const currentBalance = userSnap.data().walletBalance || 0;
+      const creditAmount = orderData.amount;
+
+      // 3. Update Order Status
+      transaction.update(orderDoc.ref, {
+        status: 'paid',
+        razorpayPaymentId: razorpay_payment_id,
+        updatedAt: serverTimestamp()
+      });
+
+      // 4. Update User Balance
+      transaction.update(userRef, {
+        walletBalance: currentBalance + creditAmount,
+        lastActionAt: serverTimestamp()
+      });
+
+      // 5. Create Transaction Record
+      const txRef = doc(collection(db, 'users', userId, 'transactions'));
+      transaction.set(txRef, {
+        amount: creditAmount,
+        type: 'deposit',
+        status: 'completed',
+        referenceId: razorpay_payment_id,
+        createdAt: new Date().toISOString()
+      });
+
+      // 6. Audit Log
+      const auditRef = doc(collection(db, 'audit_logs'));
+      transaction.set(auditRef, {
+        userId: userId,
+        action: 'PAYMENT_VERIFIED',
+        details: `Credited ₹${creditAmount} via Razorpay (PID: ${razorpay_payment_id})`,
+        severity: 'info',
+        timestamp: serverTimestamp()
+      });
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Payment Verification Failed:', error);
+    throw new Error(error.message || "Failed to verify payment");
   }
 }

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useMemo, useEffect } from 'react';
@@ -17,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { createRazorpayOrder } from '@/app/actions';
+import { createRazorpayOrder, verifyRazorpayPayment } from '@/app/actions';
 import Script from 'next/script';
 
 const MIN_WITHDRAWAL_AMOUNT = 100;
@@ -80,12 +79,32 @@ export default function WalletPage() {
         name: "INDIA X E-SPORT",
         description: "Wallet Top Up",
         order_id: orderData.orderId,
-        handler: function (response: any) {
-          toast({ 
-            title: "Payment Initiated", 
-            description: "Payment captured. Your balance will update once verified." 
-          });
-          setIsDepositOpen(false);
+        handler: async function (response: any) {
+          setIsProcessing(true);
+          try {
+            // 4. Securely verify the payment on the server
+            const verification = await verifyRazorpayPayment(
+              response.razorpay_order_id,
+              response.razorpay_payment_id,
+              response.razorpay_signature
+            );
+
+            if (verification.success) {
+              toast({ 
+                title: "Deposit Successful!", 
+                description: `₹${amountNum} has been added to your wallet.` 
+              });
+              setIsDepositOpen(false);
+            }
+          } catch (err: any) {
+            toast({
+              variant: "destructive",
+              title: "Verification Failed",
+              description: err.message || "Payment verified failed. Please contact support."
+            });
+          } finally {
+            setIsProcessing(false);
+          }
         },
         prefill: {
           name: userProfile?.username || "",
@@ -94,6 +113,11 @@ export default function WalletPage() {
         theme: {
           color: "#00FF88",
         },
+        modal: {
+          ondismiss: function() {
+            setIsProcessing(false);
+          }
+        }
       };
 
       const rzp = new (window as any).Razorpay(options);
@@ -105,7 +129,6 @@ export default function WalletPage() {
         title: "Deposit Error",
         description: error.message || "Failed to initiate deposit",
       });
-    } finally {
       setIsProcessing(false);
     }
   };
