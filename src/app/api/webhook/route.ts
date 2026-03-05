@@ -5,87 +5,79 @@ import { doc, runTransaction, serverTimestamp, collection, query, where, getDocs
 import crypto from 'crypto';
 
 /**
- * Razorpay Webhook Handler
- * Processes payment.captured events to credit user wallets.
- * Implements signature verification and idempotency checks.
+ * Razorpay Webhook Handler optimized for high traffic and idempotency.
+ * Handles payment.captured events with atomic transactions.
  */
 export async function POST(req: Request) {
   const { db } = initializeFirebase();
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
   if (!secret) {
-    console.error('RAZORPAY_WEBHOOK_SECRET is not configured.');
+    console.error('[WEBHOOK ERROR] RAZORPAY_WEBHOOK_SECRET missing');
     return NextResponse.json({ error: 'Configuration Error' }, { status: 500 });
   }
 
   try {
-    // 1. Get raw body and signature
     const bodyText = await req.text();
     const signature = req.headers.get('x-razorpay-signature');
 
-    if (!signature) {
-      return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
-    }
+    if (!signature) return NextResponse.json({ error: 'No signature' }, { status: 400 });
 
-    // 2. Verify Razorpay Signature
     const expectedSignature = crypto
       .createHmac('sha256', secret)
       .update(bodyText)
       .digest('hex');
 
     if (expectedSignature !== signature) {
+      console.warn('[WEBHOOK WARNING] Signature mismatch');
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
     const event = JSON.parse(bodyText);
     const eventId = event.id;
 
-    // 3. Process payment.captured event
     if (event.event === 'payment.captured') {
       const payment = event.payload.payment.entity;
       const orderId = payment.order_id;
       const paymentId = payment.id;
 
-      // Atomic Transaction for Idempotency and Wallet Credit
+      // START ATOMIC TRANSACTION
       await runTransaction(db, async (transaction) => {
-        // A. Check if event was already processed
+        // Idempotency: Has this specific webhook event ID been processed?
         const eventRef = doc(db, 'webhook_events', eventId);
         const eventSnap = await transaction.get(eventRef);
-        if (eventSnap.exists()) return; // Already processed
+        if (eventSnap.exists()) return; 
 
-        // B. Find the original payment order
+        // Find the original order
         const ordersRef = collection(db, 'paymentOrders');
         const q = query(ordersRef, where('razorpayOrderId', '==', orderId), limit(1));
         const orderDocs = await getDocs(q);
 
         if (orderDocs.empty) {
-          throw new Error(`Order ${orderId} not found in database.`);
+          throw new Error(`Order ${orderId} missing for PID: ${paymentId}`);
         }
 
-        const orderDoc = orderDocs.docs[0];
-        const orderData = orderDoc.data();
+        const orderDocSnap = orderDocs.docs[0];
+        const orderData = orderDocSnap.data();
         const userId = orderData.userId;
 
-        if (orderData.status === 'paid') return; // Already credited
+        // Idempotency: Has this order already been credited?
+        if (orderData.status === 'paid') return;
 
-        // C. Fetch User Profile
         const userRef = doc(db, 'users', userId);
         const userSnap = await transaction.get(userRef);
-
-        if (!userSnap.exists()) {
-          throw new Error(`User ${userId} not found.`);
-        }
+        if (!userSnap.exists()) throw new Error(`User ${userId} missing`);
 
         const currentBalance = userSnap.data().walletBalance || 0;
         const creditAmount = orderData.amount;
 
-        // D. Commit Updates
+        // EXECUTE ATOMIC BATCH
         transaction.set(eventRef, {
           eventId: eventId,
           processedAt: serverTimestamp()
         });
 
-        transaction.update(orderDoc.ref, {
+        transaction.update(orderDocSnap.ref, {
           status: 'paid',
           razorpayPaymentId: paymentId,
           updatedAt: serverTimestamp()
@@ -118,7 +110,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ received: true });
   } catch (err: any) {
-    console.error(`Webhook Processing Error: ${err.message}`);
-    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
+    console.error(`[WEBHOOK CRITICAL] ${err.message}`);
+    return NextResponse.json({ error: 'Internal failure' }, { status: 500 });
   }
 }

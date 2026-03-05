@@ -18,12 +18,12 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
-    // Protection against rapid spamming
+    // Protection against rapid spamming (2 second cooldown)
     function isNotRateLimited(userId) {
       let userDoc = get(/databases/$(database)/documents/users/$(userId));
       return !exists(/databases/$(database)/documents/users/$(userId)) || 
              userDoc.data.lastActionAt == null || 
-             duration.value(request.time - userDoc.data.lastActionAt) > duration.value(2, 's');
+             duration.value(request.time - timestamp.value(userDoc.data.lastActionAt)) > duration.value(2, 's');
     }
 
     // --- User Profile Rules ---
@@ -37,7 +37,7 @@ service cloud.firestore {
                     && request.resource.data.walletBalance == 0;
       
       // CRITICAL: Users can NEVER update their own walletBalance.
-      // Only Admin (Server Actions) can update balance.
+      // Only Admin (Server Actions) can update balance via SDK.
       allow update: if (
         isOwner(userId) 
         && request.resource.data.walletBalance == resource.data.walletBalance
@@ -48,21 +48,18 @@ service cloud.firestore {
     // --- Transaction Rules ---
     
     match /users/{userId}/transactions/{transactionId} {
-      // Users can only read their own financial history
       allow read: if isOwner(userId) || isAdmin();
       
-      // Users can create a 'pending' withdrawal request
+      // Users can only create a 'pending' withdrawal request
       allow create: if isOwner(userId) 
                     && request.resource.data.status == 'pending'
-                    && request.resource.data.amount > 0
+                    && request.resource.data.amount >= 100
                     && request.resource.data.type == 'withdrawal'
                     && isNotRateLimited(userId);
       
-      // Only admin can mark transactions as 'completed' or 'failed'
       allow update, delete: if isAdmin();
     }
 
-    // Allow collectionGroup queries for Admins to process withdrawals
     match /{path=**}/transactions/{transactionId} {
       allow list: if isAdmin();
     }
@@ -70,15 +67,13 @@ service cloud.firestore {
     // --- Razorpay Payment Order Rules ---
     
     match /paymentOrders/{orderId} {
-      // User can see their own orders
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       
-      // User creates the order record initially
       allow create: if isAuthenticated() 
                     && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.status == 'created';
+                    && request.resource.data.status == 'created'
+                    && isNotRateLimited(request.auth.uid);
       
-      // Only the backend (Admin) can mark an order as 'paid'
       allow update: if isAdmin();
       allow delete: if false;
     }
@@ -92,8 +87,6 @@ service cloud.firestore {
       match /participants/{userId} {
         allow read: if isAuthenticated();
         
-        // Joining logic is handled atomically in code, 
-        // but rules prevent users from setting their own kills/damage.
         allow create: if isOwner(userId) 
                       && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId))
                       && request.resource.data.kills == 0
@@ -106,7 +99,8 @@ service cloud.firestore {
     // --- System Logs ---
     
     match /webhook_events/{eventId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if false; // Only via Server Action (Admin Context)
     }
 
     match /audit_logs/{logId} {
