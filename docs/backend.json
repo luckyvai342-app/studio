@@ -45,6 +45,20 @@
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
+    "PaymentOrder": {
+      "title": "Payment Order",
+      "description": "Razorpay order tracking",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "razorpayOrderId": { "type": "string" },
+        "status": { "type": "string", "enum": ["created", "paid", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "razorpayOrderId", "status"]
+    },
     "AuditLog": {
       "title": "Audit Log",
       "description": "System-wide security and activity logs",
@@ -84,6 +98,10 @@
     "/users/{userId}/transactions/{transactionId}": {
       "schema": "#/entities/Transaction",
       "description": "User financial history"
+    },
+    "/paymentOrders/{orderId}": {
+      "schema": "#/entities/PaymentOrder",
+      "description": "Razorpay order records"
     },
     "/audit_logs/{logId}": {
       "schema": "#/entities/AuditLog",

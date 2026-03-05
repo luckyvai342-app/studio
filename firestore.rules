@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -28,13 +29,9 @@ service cloud.firestore {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
       
-      // Profile creation: Users can create their own profile with 0 balance
       allow create: if isOwner(userId) 
                     && request.resource.data.walletBalance == 0;
       
-      // SECURE WALLET: Owners can update metadata (username, phone, etc.) 
-      // but MUST NOT change their walletBalance.
-      // Only Admins (or Admin SDK via Backend) can change balance.
       allow update: if (
         isOwner(userId) 
         && request.resource.data.walletBalance == resource.data.walletBalance
@@ -50,7 +47,6 @@ service cloud.firestore {
       match /participants/{userId} {
         allow read: if isAuthenticated();
         
-        // Joining: User can join if they are the owner and start with 0 kills
         allow create: if isOwner(userId) 
                       && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId))
                       && request.resource.data.kills == 0
@@ -60,34 +56,31 @@ service cloud.firestore {
       }
     }
 
-    // Transaction & Withdrawal Rules
+    // Transaction Rules
     match /users/{userId}/transactions/{transactionId} {
       allow read: if isOwner(userId) || isAdmin();
       
-      // Withdrawal/Deposit Request: 
-      // 1. User must be the owner.
-      // 2. Status must be 'pending'.
-      // 3. Type must be 'deposit' or 'withdrawal'.
-      // 4. Amount must be positive.
       allow create: if isOwner(userId) 
                     && request.resource.data.status == 'pending'
                     && request.resource.data.amount > 0
                     && (request.resource.data.type == 'deposit' || request.resource.data.type == 'withdrawal')
                     && isNotRateLimited(userId);
       
-      // IMMUTABILITY: Users can NEVER update or delete a transaction once created.
-      // This prevents users from "approving" their own withdrawals or hiding history.
-      // Only Admins can update status (e.g., to 'completed' or 'failed').
       allow update, delete: if isAdmin();
+    }
+
+    // Payment Order Rules
+    match /paymentOrders/{orderId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
     }
 
     // Audit Log Rules
     match /audit_logs/{logId} {
-      // Admins can view logs for security monitoring
       allow read: if isAdmin();
-      // System can append logs, users can trigger appends via specific actions
       allow create: if isAuthenticated();
-      allow update, delete: if false; // Logs are immutable for everyone
+      allow update, delete: if false;
     }
   }
 }

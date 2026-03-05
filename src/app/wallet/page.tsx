@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { createRazorpayOrder } from '@/app/actions';
+import Script from 'next/script';
 
 const MIN_WITHDRAWAL_AMOUNT = 100;
 
@@ -25,7 +27,6 @@ export default function WalletPage() {
   const { user: authUser } = useUser();
   const { toast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
@@ -50,6 +51,7 @@ export default function WalletPage() {
   const handleDeposit = async () => {
     if (!authUser || !depositAmount) return;
     const amountNum = parseInt(depositAmount);
+    
     if (isNaN(amountNum) || amountNum < 100) {
       toast({ variant: "destructive", title: "Invalid Amount", description: "Minimum deposit is ₹100" });
       return;
@@ -57,29 +59,46 @@ export default function WalletPage() {
 
     setIsProcessing(true);
     try {
-      /**
-       * RAZORPAY INTEGRATION STEP:
-       * Instead of Stripe Checkout, you will:
-       * 1. Call your backend to create a Razorpay Order.
-       * 2. Initialize Razorpay Checkout on the client.
-       * 3. Handle the payment success callback.
-       */
+      // 1. Create Razorpay Order via Server Action
+      const orderData = await createRazorpayOrder(authUser.uid, amountNum);
       
-      await addDoc(collection(db, 'users', authUser.uid, 'transactions'), {
+      // 2. Track order in Firestore (Client Side Only Firebase)
+      await addDoc(collection(db, 'paymentOrders'), {
         userId: authUser.uid,
         amount: amountNum,
-        type: 'deposit',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        referenceId: 'razorpay_pending_placeholder'
+        currency: 'INR',
+        razorpayOrderId: orderData.orderId,
+        status: 'created',
+        createdAt: serverTimestamp()
       });
 
-      toast({
-        title: "Deposit Initiated",
-        description: "Razorpay integration is pending. This is a placeholder for the payment gateway.",
-      });
+      // 3. Open Razorpay Checkout
+      const options = {
+        key: orderData.razorpayKeyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "INDIA X E-SPORT",
+        description: "Wallet Top Up",
+        order_id: orderData.orderId,
+        handler: function (response: any) {
+          toast({ 
+            title: "Payment Initiated", 
+            description: "Payment captured. Your balance will update once verified." 
+          });
+          setIsDepositOpen(false);
+        },
+        prefill: {
+          name: userProfile?.username || "",
+          contact: userProfile?.phone || ""
+        },
+        theme: {
+          color: "#00FF88",
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
       
-      setIsDepositOpen(false);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -170,6 +189,8 @@ export default function WalletPage() {
 
   return (
     <div className="flex flex-col min-h-screen animate-in-fade bg-[#0D0D0D] p-4 pb-24">
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
+      
       <header className="flex items-center justify-between mb-8 mt-4">
         <Link href="/" className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-colors">
           <ChevronLeft className="w-6 h-6" />
