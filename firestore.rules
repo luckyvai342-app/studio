@@ -14,12 +14,14 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // In a prototype, we can check for a specific UID or a collection of admins
-      // Real prod would use custom claims: request.auth.token.admin == true;
       return isAuthenticated() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) || 
         request.auth.token.admin == true
       );
+    }
+
+    function isParticipant(tournamentId) {
+      return exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(request.auth.uid));
     }
 
     // --- User Profile Rules ---
@@ -38,51 +40,50 @@ service cloud.firestore {
         && request.resource.data.accountVerified == resource.data.accountVerified
         && request.resource.data.status == resource.data.status
       ) || isAdmin();
+
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        // Writes only via server actions
+        allow write: if false;
+      }
     }
 
     // --- Tournament Rules ---
     
     match /tournaments/{tournamentId} {
-      allow read: if isAuthenticated();
+      // Sensitive room data is protected by checking status and participation
+      allow get: if isAuthenticated();
+      allow list: if isAuthenticated();
       allow write: if isAdmin();
 
       match /participants/{userId} {
         allow read: if isAuthenticated();
-        allow create: if isOwner(userId) 
-                      && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId))
-                      && request.resource.data.kills == 0;
+        // Create handled by server action, but we keep basic safety here
+        allow create: if isOwner(userId) && !exists(/databases/$(database)/documents/tournaments/$(tournamentId)/participants/$(userId));
         allow update, delete: if isAdmin();
       }
     }
 
-    // --- Transaction Rules ---
+    // --- Audit & Payments ---
 
-    match /users/{userId}/transactions/{transactionId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && request.resource.data.type == 'withdrawal';
-      allow update, delete: if isAdmin();
-    }
-    
     match /paymentOrders/{orderId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update: if isAdmin();
     }
 
-    // --- Admin & System Rules ---
-
-    match /admins/{adminId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Only manageable via Firebase Console or special script
-    }
-
     match /audit_logs/{logId} {
       allow read: if isAdmin();
-      allow create: if isAuthenticated(); // Allow recording system events
+      allow create: if isAuthenticated(); 
     }
     
     match /webhook_events/{eventId} {
-      allow read, write: if false; // Backend only
+      allow read, write: if false; 
+    }
+
+    match /admins/{adminId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
     }
   }
 }

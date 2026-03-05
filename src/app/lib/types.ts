@@ -1,5 +1,5 @@
 
-export type TournamentStatus = 'open' | 'ongoing' | 'completed' | 'cancelled';
+export type TournamentStatus = 'open' | 'full' | 'ongoing' | 'completed' | 'cancelled';
 
 export interface Tournament {
   id: string;

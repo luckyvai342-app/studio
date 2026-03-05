@@ -29,7 +29,7 @@
         "description": { "type": "string" },
         "entryFee": { "type": "number" },
         "totalPrize": { "type": "number" },
-        "status": { "type": "string", "enum": ["open", "ongoing", "completed", "cancelled"] },
+        "status": { "type": "string", "enum": ["open", "full", "ongoing", "completed", "cancelled"] },
         "startTime": { "type": "string", "format": "date-time" },
         "maxPlayers": { "type": "number" },
         "joinedCount": { "type": "number" },
@@ -54,18 +54,6 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "amount", "type", "status", "createdAt"]
-    },
-    "AdminLog": {
-      "title": "Admin Log",
-      "description": "Audit trail for admin actions",
-      "type": "object",
-      "properties": {
-        "adminId": { "type": "string" },
-        "action": { "type": "string" },
-        "targetId": { "type": "string" },
-        "details": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" }
-      }
     }
   },
   "auth": {
@@ -84,20 +72,16 @@
       "schema": {
         "type": "object",
         "properties": {
+          "userId": { "type": "string" },
           "username": { "type": "string" },
           "gameUid": { "type": "string" },
           "gameUsername": { "type": "string" },
           "kills": { "type": "number" },
           "placement": { "type": "number" },
-          "prizeWon": { "type": "number" },
           "joinedAt": { "type": "string", "format": "date-time" }
         }
       },
       "description": "Participants list with game identity"
-    },
-    "/audit_logs/{logId}": {
-      "schema": "#/entities/AdminLog",
-      "description": "System-wide audit logs"
     }
   }
 }
